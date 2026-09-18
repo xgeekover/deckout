@@ -3,14 +3,16 @@
  * 엔진(Canvas)과 UI(React)가 함께 참조하는 유일한 계약(contract) 레이어.
  */
 
+import { BALANCE } from '../config/balance.ts';
+
 export interface Vec2 {
   x: number;
   y: number;
 }
 
 /** 논리 해상도. 실제 캔버스 픽셀은 DPR/컨테이너 크기에 맞춰 스케일된다. */
-export const GAME_WIDTH = 900;
-export const GAME_HEIGHT = 640;
+export const GAME_WIDTH = BALANCE.field.width;
+export const GAME_HEIGHT = BALANCE.field.height;
 
 /* ------------------------------------------------------------------ */
 /* Ball                                                                */
@@ -39,52 +41,35 @@ export interface BallStats {
 export const BALL_STATS: Record<BallType, BallStats> = {
   normal: {
     label: '기본 구체',
-    radius: 8,
-    speed: 480,
-    damage: 1,
-    pierce: false,
+    ...BALANCE.ball.stats.normal,
     color: '#eef4ff',
     glow: 'rgba(120, 190, 255, 0.55)',
     trail: '#ffffff',
   },
   heavy: {
     label: '중량 구체',
-    radius: 12,
-    speed: 390,
-    damage: 3,
-    pierce: false,
+    ...BALANCE.ball.stats.heavy,
     color: '#ffd98a',
     glow: 'rgba(247, 181, 56, 0.55)',
     trail: '#f7b538',
   },
   pierce: {
     label: '관통 구체',
-    radius: 7,
-    speed: 540,
-    damage: 1,
-    pierce: true,
+    ...BALANCE.ball.stats.pierce,
     color: '#8ad8ff',
     glow: 'rgba(56, 189, 248, 0.6)',
     trail: '#38bdf8',
   },
   bomb: {
     label: '폭탄 구체',
-    radius: 11,
-    speed: 420,
-    damage: 1,
-    pierce: false,
+    ...BALANCE.ball.stats.bomb,
     color: '#ffb066',
     glow: 'rgba(255, 138, 61, 0.65)',
     trail: '#ff8a3d',
-    explosionRadius: 74,
-    explosionDamage: 2,
   },
   split: {
     label: '분열 구체',
-    radius: 8,
-    speed: 470,
-    damage: 1,
-    pierce: false,
+    ...BALANCE.ball.stats.split,
     color: '#ff9de2',
     glow: 'rgba(255, 157, 226, 0.55)',
     trail: '#ff9de2',
@@ -191,9 +176,6 @@ export type RewardItem =
 /** 일반 / 단단함 / 핵심 / 폭탄 */
 export type BrickType = 'normal' | 'tough' | 'core' | 'bomb';
 
-/** 폭탄 벽돌이 파괴될 때의 폭발 반경과 주변 피해량 */
-export const BOMB_BRICK_RADIUS = 96;
-export const BOMB_BRICK_DAMAGE = 2;
 
 /**
  * 벽돌의 데이터 계약. `engine/entities/Brick.ts` 의 클래스가 이 형태를 구현하며,
@@ -227,14 +209,7 @@ export interface BrickGridConfig {
 /** 한 행이 차지하는 세로 간격 = 벽돌 높이 + 간격 */
 export const rowPitch = (g: BrickGridConfig): number => g.height + g.gap;
 
-export const DEFAULT_GRID: BrickGridConfig = {
-  rows: 5,
-  cols: 8,
-  gap: 8,
-  sideMargin: 48,
-  top: 92,
-  height: 28,
-};
+export const DEFAULT_GRID: BrickGridConfig = { ...BALANCE.bricks.grid };
 
 /* ------------------------------------------------------------------ */
 /* GameState (엔진 -> React 로 방출되는 스냅샷)                          */
@@ -281,6 +256,8 @@ export interface GameState {
   /** 현재 턴에 뽑힌 카드 (없으면 null) */
   currentCard: DeckCard | null;
   bricksRemaining: number;
+  /** 이번 판에서 파괴한 벽돌 수 */
+  bricksDestroyed: number;
   /** 현재 턴에서 공이 바닥에 떨어지기 전까지 누적된 연속 타격 수 */
   combo: number;
   /** 이번 판 최고 콤보 */
@@ -307,8 +284,25 @@ export const createInitialGameState = (): GameState => ({
   relicCharges: {},
   currentCard: null,
   bricksRemaining: 0,
+  bricksDestroyed: 0,
   combo: 0,
   bestCombo: 0,
   rewardChoices: [],
   turnsUntilDeadline: -1,
 });
+
+/* ------------------------------------------------------------------ */
+/* 판 결과                                                              */
+/* ------------------------------------------------------------------ */
+
+/** 한 판이 끝났을 때(또는 도중에 조회했을 때)의 요약. 결과 모달과 기록 저장에 쓰인다. */
+export interface RunSummary {
+  outcome: 'victory' | 'defeat' | 'in-progress';
+  wave: number;
+  turn: number;
+  score: number;
+  bestCombo: number;
+  bricksDestroyed: number;
+  deck: DeckCard[];
+  relics: Relic[];
+}

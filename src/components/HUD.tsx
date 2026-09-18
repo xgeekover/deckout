@@ -1,16 +1,13 @@
 import { BALL_STATS } from '../types/game';
 import type { BallType, DeckCard, GameState, Rarity, Relic } from '../types/game';
-
-/** 직전 판의 결과 — 엔진의 onGameOver / onVictory 훅으로 채워진다. */
-export interface RunResult {
-  outcome: 'victory' | 'defeat';
-  turn: number;
-  score: number;
-}
+import type { ControlMode, Records, Settings } from '../utils/storage';
 
 interface HUDProps {
   state: GameState;
-  lastRun: RunResult | null;
+  records: Records;
+  settings: Settings;
+  onToggleMute: () => void;
+  onControlModeChange: (mode: ControlMode) => void;
   onRestart: () => void;
 }
 
@@ -53,7 +50,14 @@ function countByType(deck: DeckCard[]): Array<[BallType, number]> {
 }
 
 /** 남은 덱 · 현재 턴 · 데드라인까지 남은 턴 표시 */
-export function HUD({ state, lastRun, onRestart }: HUDProps) {
+export function HUD({
+  state,
+  records,
+  settings,
+  onToggleMute,
+  onControlModeChange,
+  onRestart,
+}: HUDProps) {
   const current = state.currentCard;
   // 분모는 영구 덱 장수가 아니라 "지금 순환 중인 카드 전체"다.
   // 재활용 루틴이 만든 임시 카드는 deck 에 없어서, deck.length 로 나누면 9 / 5 같은 값이 나온다.
@@ -142,28 +146,74 @@ export function HUD({ state, lastRun, onRestart }: HUDProps) {
         </div>
       </section>
 
-      <section className="rounded-xl border border-deck-edge bg-deck-panel/60 p-4 text-xs leading-relaxed text-slate-400">
-        <b className="text-slate-200">조작</b>
-        <ul className="mt-1.5 space-y-1">
-          <li>마우스 이동 · ← → · A/D — 패들</li>
-          <li>클릭 · Space — 발사</li>
-          <li>R — 재시작 (게임 오버 · 승리 화면)</li>
-        </ul>
+      <section className="rounded-xl border border-deck-edge bg-deck-panel/60 p-4">
+        <span className="text-xs uppercase tracking-wider text-slate-400">최고 기록</span>
+        <dl className="mt-2 grid grid-cols-3 gap-2 text-center">
+          <RecordCell label="점수" value={records.highScore.toLocaleString()} testId="record-high-score" />
+          <RecordCell label="웨이브" value={records.maxWave > 0 ? `${records.maxWave}` : '—'} testId="record-max-wave" />
+          <RecordCell label="누적 파괴" value={records.totalBricksDestroyed.toLocaleString()} testId="record-total-bricks" />
+        </dl>
       </section>
 
-      {lastRun && (
-        <div className="rounded-xl border border-deck-edge bg-deck-panel/40 px-4 py-2.5 text-[11px] text-slate-400">
-          직전 판{' '}
-          <b className={lastRun.outcome === 'victory' ? 'text-emerald-300' : 'text-rose-400'}>
-            {lastRun.outcome === 'victory' ? '승리' : '패배'}
-          </b>{' '}
-          · {lastRun.turn}턴 · {lastRun.score.toLocaleString()}점
+      <section className="rounded-xl border border-deck-edge bg-deck-panel/60 p-4">
+        <span className="text-xs uppercase tracking-wider text-slate-400">설정</span>
+        <div className="mt-2 flex items-center justify-between gap-3">
+          <span className="text-xs text-slate-300">사운드</span>
+          <button
+            type="button"
+            aria-pressed={settings.isMuted}
+            data-testid="mute-toggle"
+            onClick={(e) => {
+              onToggleMute();
+              e.currentTarget.blur(); // 포커스가 남으면 Space 가 발사 대신 이 버튼을 누른다
+            }}
+            className={`rounded-lg border px-3 py-1 text-xs transition ${
+              settings.isMuted
+                ? 'border-slate-600 text-slate-500'
+                : 'border-deck-accent/60 text-deck-accent'
+            }`}
+          >
+            {settings.isMuted ? '🔇 음소거됨' : '🔊 켜짐'}
+          </button>
         </div>
-      )}
+        <div className="mt-2 flex items-center justify-between gap-3">
+          <span className="text-xs text-slate-300">패들 조작</span>
+          <div role="radiogroup" aria-label="패들 조작 방식" className="flex overflow-hidden rounded-lg border border-deck-edge">
+            {(['mouse', 'keyboard'] as const).map((mode) => (
+              <button
+                key={mode}
+                type="button"
+                role="radio"
+                aria-checked={settings.controlMode === mode}
+                data-testid={`control-${mode}`}
+                onClick={(e) => {
+                  onControlModeChange(mode);
+                  e.currentTarget.blur();
+                }}
+                className={`px-3 py-1 text-xs transition ${
+                  settings.controlMode === mode
+                    ? 'bg-deck-accent/20 text-deck-accent'
+                    : 'text-slate-500 hover:text-slate-300'
+                }`}
+              >
+                {mode === 'mouse' ? '마우스' : '키보드'}
+              </button>
+            ))}
+          </div>
+        </div>
+        {settings.controlMode === 'keyboard' && (
+          <p className="mt-2 text-[11px] leading-relaxed text-slate-500">
+            마우스를 움직여도 패들이 따라가지 않습니다. A/D 또는 ←/→ 로 조작하세요.
+          </p>
+        )}
+      </section>
 
       <button
         type="button"
-        onClick={onRestart}
+        onClick={(e) => {
+          onRestart();
+          e.currentTarget.blur();
+        }}
         className="rounded-xl border border-deck-edge bg-deck-panel/60 px-4 py-2 text-sm text-slate-300 transition hover:border-deck-accent hover:text-deck-accent"
       >
         새 게임
@@ -309,6 +359,17 @@ function DeadlineMeter({ turns }: { turns: number }) {
         </p>
       )}
     </section>
+  );
+}
+
+function RecordCell({ label, value, testId }: { label: string; value: string; testId: string }) {
+  return (
+    <div className="rounded-lg border border-deck-edge bg-deck-bg/50 px-1 py-1.5">
+      <dt className="text-[10px] text-slate-500">{label}</dt>
+      <dd data-testid={testId} className="text-sm font-semibold tabular-nums text-deck-gold">
+        {value}
+      </dd>
+    </div>
   );
 }
 

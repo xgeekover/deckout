@@ -1,9 +1,10 @@
+import { BALANCE } from '../../config/balance';
 import { BALL_STATS } from '../../types/game';
 import type { BallType, Vec2 } from '../../types/game';
 import type { Circle } from '../Physics';
 
 /** 잔상으로 남길 최근 프레임 수 */
-const HISTORY_LENGTH = 8;
+const HISTORY_LENGTH = BALANCE.feel.trailLength;
 
 export class Ball {
   x: number;
@@ -94,7 +95,7 @@ export class Ball {
     return !this.hitCooldowns.has(brickId);
   }
 
-  markHit(brickId: number, seconds = 0.12): void {
+  markHit(brickId: number, seconds: number = BALANCE.ball.brickHitCooldown): void {
     this.hitCooldowns.set(brickId, seconds);
   }
 

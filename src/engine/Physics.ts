@@ -3,6 +3,7 @@
  * DOM/Canvas 에 의존하지 않으므로 단독 테스트가 가능하다.
  */
 
+import { BALANCE } from '../config/balance.ts';
 import type { Vec2 } from '../types/game';
 
 export interface Circle {
@@ -364,7 +365,7 @@ export function paddleReflect(
   ballX: number,
   paddle: Rect,
   speed: number,
-  maxAngleDeg = 60,
+  maxAngleDeg: number = BALANCE.paddle.maxBounceAngleDeg,
 ): Vec2 {
   const half = paddle.w / 2;
   const center = paddle.x + half;
@@ -379,7 +380,10 @@ export function paddleReflect(
  * 수직 성분이 너무 작으면(거의 수평 이동) 공이 영원히 좌우로만 튀는 교착이 생긴다.
  * 속력을 유지한 채 최소 수직 비율을 보장한다.
  */
-export function ensureMinVerticalSpeed(v: Vec2, minRatio = 0.22): Vec2 {
+export function ensureMinVerticalSpeed(
+  v: Vec2,
+  minRatio: number = BALANCE.ball.minVerticalRatio,
+): Vec2 {
   const speed = Math.hypot(v.x, v.y);
   if (speed === 0) return { x: 0, y: -1 };
 
@@ -400,7 +404,10 @@ export function ensureMinVerticalSpeed(v: Vec2, minRatio = 0.22): Vec2 {
  * minRatio 를 크게 잡으면 "똑바로 위로 쏘는" 감각이 사라지므로 2% 만 준다.
  * 한 번 튄 뒤 패들 중심에서 벗어나면 offset 반사가 알아서 각을 키운다.
  */
-export function ensureMinHorizontalSpeed(v: Vec2, minRatio = 0.02): Vec2 {
+export function ensureMinHorizontalSpeed(
+  v: Vec2,
+  minRatio: number = BALANCE.ball.minHorizontalRatio,
+): Vec2 {
   const speed = Math.hypot(v.x, v.y);
   if (speed === 0) return { x: 0, y: -1 };
 

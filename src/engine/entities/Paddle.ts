@@ -1,8 +1,6 @@
+import { BALANCE } from '../../config/balance';
 import { clamp } from '../Physics';
 import type { Rect } from '../Physics';
-
-const KEYBOARD_SPEED = 780; // px/s
-const POINTER_SMOOTHING = 24; // 클수록 마우스에 빠르게 붙는다
 
 /** 플레이어가 조작하는 패들. x 는 중심 좌표. */
 export class Paddle {
@@ -15,7 +13,12 @@ export class Paddle {
   /** 직전 프레임 대비 이동 속도 (px/s) — 스핀 연출용 */
   velocity = 0;
 
-  constructor(x: number, y: number, width = 130, height = 16) {
+  constructor(
+    x: number,
+    y: number,
+    width: number = BALANCE.paddle.baseWidth,
+    height: number = BALANCE.paddle.height,
+  ) {
     this.x = x;
     this.y = y;
     this.width = width;
@@ -32,9 +35,9 @@ export class Paddle {
 
     if (dir !== 0) {
       this.pointerTarget = null; // 키보드 입력이 마우스 추종을 덮어쓴다
-      this.x += dir * KEYBOARD_SPEED * dt;
+      this.x += dir * BALANCE.paddle.keyboardSpeed * dt;
     } else if (this.pointerTarget !== null) {
-      const t = 1 - Math.exp(-POINTER_SMOOTHING * dt); // 프레임레이트 독립 보간
+      const t = 1 - Math.exp(-BALANCE.paddle.pointerSmoothing * dt); // 프레임레이트 독립 보간
       this.x += (this.pointerTarget - this.x) * t;
     }
 

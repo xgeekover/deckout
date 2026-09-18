@@ -2,12 +2,10 @@
  * 웨이브 클리어 보상 추첨. DOM 무의존 순수 모듈.
  */
 
+import { BALANCE } from '../config/balance.ts';
 import { RELIC_CATALOG } from './Relics.ts';
 import { BALL_CARD_DATA } from '../types/game.ts';
 import type { BallType, Rarity, RewardItem } from '../types/game.ts';
-
-/** 등급별 추첨 가중치 */
-const RARITY_WEIGHT: Record<Rarity, number> = { COMMON: 6, RARE: 3, LEGENDARY: 1 };
 
 /** 보상으로 나오는 볼과 그 등급 (split 은 미구현이라 제외) */
 const BALL_REWARDS: Array<{ ballType: BallType; rarity: Rarity }> = [
@@ -22,14 +20,32 @@ type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K>
 
 type Candidate = DistributiveOmit<RewardItem, 'id'> & { key: string };
 
-function pickWeighted(pool: Candidate[], rand: () => number): Candidate {
-  const total = pool.reduce((sum, c) => sum + RARITY_WEIGHT[c.rarity], 0);
+const RARITY_ORDER: Rarity[] = ['COMMON', 'RARE', 'LEGENDARY'];
+
+/**
+ * 2단계 추첨: 먼저 등급을 BALANCE.rewards.rarityChance(70/25/5)로 정하고,
+ * 그 등급 안에서는 균등하게 고른다. 후보가 없는 등급은 빼고 남은 확률을 비율대로 다시 나눈다.
+ *
+ * 후보별 가중치로 한 번에 뽑으면 "같은 등급의 후보 수"가 등장 확률을 흔든다
+ * (COMMON 이 2개면 COMMON 이 두 배로 자주 나온다). 등급 확률을 스펙 그대로 지키려면 나눠 뽑아야 한다.
+ */
+export function pickByRarity<T extends { rarity: Rarity }>(pool: T[], rand: () => number): T {
+  const chance = BALANCE.rewards.rarityChance;
+  const tiers = RARITY_ORDER.filter((r) => pool.some((c) => c.rarity === r));
+  const total = tiers.reduce((sum, r) => sum + chance[r], 0);
+
   let roll = rand() * total;
-  for (const candidate of pool) {
-    roll -= RARITY_WEIGHT[candidate.rarity];
-    if (roll <= 0) return candidate;
+  let tier = tiers[tiers.length - 1];
+  for (const r of tiers) {
+    roll -= chance[r];
+    if (roll < 0) {
+      tier = r;
+      break;
+    }
   }
-  return pool[pool.length - 1];
+
+  const inTier = pool.filter((c) => c.rarity === tier);
+  return inTier[Math.min(Math.floor(rand() * inTier.length), inTier.length - 1)];
 }
 
 /**
@@ -43,7 +59,7 @@ function pickWeighted(pool: Candidate[], rand: () => number): Candidate {
 export function rollRewards(
   ownedRelicIds: ReadonlySet<string>,
   wave: number,
-  count = 3,
+  count: number = BALANCE.rewards.choices,
   rand: () => number = Math.random,
 ): RewardItem[] {
   const relics: Candidate[] = RELIC_CATALOG.filter((r) => !ownedRelicIds.has(r.id)).map((relic) => ({
@@ -61,20 +77,20 @@ export function rollRewards(
 
   const picks: Candidate[] = [];
   if (relics.length > 0) {
-    const guaranteed = pickWeighted(relics, rand);
+    const guaranteed = pickByRarity(relics, rand);
     picks.push(guaranteed);
     relics.splice(relics.indexOf(guaranteed), 1);
   }
 
   if (picks.length < count) {
-    const guaranteedBall = pickWeighted(balls, rand);
+    const guaranteedBall = pickByRarity(balls, rand);
     picks.push(guaranteedBall);
     balls.splice(balls.indexOf(guaranteedBall), 1);
   }
 
   const pool = [...relics, ...balls];
   while (picks.length < count && pool.length > 0) {
-    const choice = pickWeighted(pool, rand);
+    const choice = pickByRarity(pool, rand);
     picks.push(choice);
     pool.splice(pool.indexOf(choice), 1);
   }

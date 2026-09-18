@@ -9,28 +9,33 @@
  * 여기 있는 객체들은 불변 정의라서 여러 판에 걸쳐 그대로 재사용해도 안전하다.
  */
 
+import { BALANCE } from '../config/balance.ts';
 import { BALL_CARD_DATA } from '../types/game.ts';
 import type { Relic, RelicModifiers } from '../types/game.ts';
 
 /** 재활용 루틴이 발동하는 콤보 */
-export const SCRAP_CYCLE_COMBO = 5;
+export const SCRAP_CYCLE_COMBO = BALANCE.relics.scrapCycleCombo;
 
 export const RELIC_WIDE_PADDLE: Relic = {
   id: 'wide-paddle',
   name: '광폭 패들',
-  description: '패들 너비가 20% 넓어진다.',
+  description: `패들 너비가 ${Math.round((BALANCE.relics.widePaddleWidthMul - 1) * 100)}% 넓어진다.`,
   icon: '🏓',
   rarity: 'COMMON',
-  modifiers: { paddleWidthMul: 1.2 },
+  modifiers: { paddleWidthMul: BALANCE.relics.widePaddleWidthMul },
 };
 
 export const RELIC_FLAME_TRAIL: Relic = {
   id: 'flame-trail',
   name: '화염 도선',
-  description: '모든 볼의 이동 속도 +15%, 기본 대미지 +1.',
+  description: `모든 볼의 이동 속도 +${Math.round((BALANCE.relics.flameTrailSpeedMul - 1) * 100)}%, 기본 대미지 +${BALANCE.relics.flameTrailDamageAdd}.`,
   icon: '🔥',
   rarity: 'RARE',
-  modifiers: { ballSpeedMul: 1.15, ballDamageAdd: 1, emberTrail: true },
+  modifiers: {
+    ballSpeedMul: BALANCE.relics.flameTrailSpeedMul,
+    ballDamageAdd: BALANCE.relics.flameTrailDamageAdd,
+    emberTrail: true,
+  },
 };
 
 export const RELIC_SAFETY_NET: Relic = {
@@ -39,7 +44,7 @@ export const RELIC_SAFETY_NET: Relic = {
   description: '웨이브당 1회, 바닥으로 떨어지는 공을 받아 위로 튕겨낸다.',
   icon: '🕸️',
   rarity: 'RARE',
-  chargesPerWave: 1,
+  chargesPerWave: BALANCE.relics.safetyNetChargesPerWave,
   onBallFall(ctx) {
     if (!ctx.consumeCharge('safety-net')) return false;
     ctx.announce('SAFETY NET!');

@@ -1,6 +1,9 @@
 /**
  * 웨이브별 벽돌 배치 패턴과 HP 스케일링. DOM 무의존 순수 모듈.
+ * 수치와 공식은 config/balance.ts 에 있다.
  */
+
+import { BALANCE, toughBrickChance, waveHpBonus } from '../config/balance.ts';
 
 export interface WavePattern {
   id: string;
@@ -62,17 +65,11 @@ export function patternForWave(wave: number): WavePattern {
   return ROTATION[(wave - 2) % ROTATION.length];
 }
 
-/** 행별 기본 HP (0번이 최상단). 위로 갈수록 단단하다. */
-export const ROW_HP = [3, 2, 2, 1, 1];
-
 /**
- * 웨이브에 따른 칸 HP.
- *  - 2웨이브마다 전체 +1  → 평균 HP 상승
- *  - 웨이브당 +12%p(최대 60%) 확률로 추가 +1 → 단단한 벽돌 비율 상승
+ * 웨이브에 따른 칸 HP = 행 기본 HP + 웨이브 보너스 + (확률적으로) 단단한 벽돌 +1
  */
 export function waveCellHp(wave: number, row: number, rand: () => number = Math.random): number {
-  const base = ROW_HP[Math.min(row, ROW_HP.length - 1)];
-  const flat = Math.floor((wave - 1) / 2);
-  const toughChance = Math.min(0.12 * (wave - 1), 0.6);
-  return base + flat + (rand() < toughChance ? 1 : 0);
+  const rowHp = BALANCE.bricks.rowHp;
+  const base = rowHp[Math.min(row, rowHp.length - 1)];
+  return base + waveHpBonus(wave) + (rand() < toughBrickChance(wave) ? 1 : 0);
 }
