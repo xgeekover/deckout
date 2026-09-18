@@ -814,6 +814,8 @@ export class GameEngine {
     if (!resolved) return;
 
     const stats = BALL_STATS[ball.type];
+    const comboBefore = this.combo;
+    const anchor = resolved.contacts[0].result.collision.contact;
 
     for (const { index, result } of resolved.contacts) {
       const brick = this.bricks[index];
@@ -841,6 +843,7 @@ export class GameEngine {
     }
 
     this.resolveBlasts();
+    this.popCombo(comboBefore, anchor.x, anchor.y);
     const cleared = this.flushBrickChanges();
 
     // 마지막 벽돌이었다면 공이 떨어질 때까지 기다리지 않고 즉시 웨이브를 끝낸다.
@@ -878,11 +881,10 @@ export class GameEngine {
     const center = brick.center;
 
     // 콤보는 "벽돌을 때린 횟수". 폭발에 휩쓸린 벽돌도 포함된다.
+    // 팝업은 여기서 띄우지 않는다 — 연쇄 폭발이면 벽돌마다 하나씩 동시에 떠서
+    // 서로 겹쳐 읽을 수 없게 된다. 충돌 처리가 끝난 뒤 최종값으로 한 번만 띄운다.
     this.combo += 1;
     this.floating.spawnDamage(cx, cy, damage, brick.tier.text);
-    if (this.combo >= COMBO_POPUP_MIN && this.combo % 2 === 1) {
-      this.floating.spawnCombo(cx, cy - 34, this.combo);
-    }
 
     if (destroyed) {
       this.destroyedBuffer = true;
@@ -917,7 +919,8 @@ export class GameEngine {
       processed++;
 
       this.particles.explosion(blast.x, blast.y, blast.radius);
-      this.floating.spawnBoom(blast.x, blast.y);
+      // 24연쇄면 BOOM! 이 24개 겹친다. 앞의 두 번만 띄우고 나머지는 파티클로만 보여준다.
+      if (processed <= 2) this.floating.spawnBoom(blast.x, blast.y);
       this.shake.shake(...SHAKE_EXPLOSION);
       this.requestHitStop(HITSTOP_EXPLOSION);
 
@@ -949,6 +952,18 @@ export class GameEngine {
     this.scoreBuffer = 0;
     this.destroyedBuffer = false;
     return this.bricks.length === 0;
+  }
+
+  /**
+   * 이번 충돌로 오른 콤보를 팝업 하나로 알린다.
+   *  - 평범한 랠리(한 번에 1타)에서는 홀수 콤보에서만 띄워 화면이 시끄럽지 않게 하고,
+   *  - 폭발처럼 한 번에 여러 개를 때린 경우에는 최종 콤보를 반드시 보여준다.
+   */
+  private popCombo(before: number, x: number, y: number): void {
+    const gained = this.combo - before;
+    if (gained <= 0 || this.combo < COMBO_POPUP_MIN) return;
+    if (gained === 1 && this.combo % 2 === 0) return;
+    this.floating.spawnCombo(x, y - 40, this.combo);
   }
 
   private requestHitStop(seconds: number): void {
