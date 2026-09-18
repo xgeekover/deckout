@@ -16,8 +16,8 @@ export const GAME_HEIGHT = 640;
 /* Ball                                                                */
 /* ------------------------------------------------------------------ */
 
-/** 덱에 들어갈 수 있는 공의 종류. Step 1에서는 normal/heavy/pierce 구현. */
-export type BallType = 'normal' | 'heavy' | 'pierce' | 'split';
+/** 덱에 들어갈 수 있는 공의 종류. split 은 타입만 정의돼 있고 미구현. */
+export type BallType = 'normal' | 'heavy' | 'pierce' | 'bomb' | 'split';
 
 export interface BallStats {
   label: string;
@@ -29,6 +29,11 @@ export interface BallStats {
   pierce: boolean;
   color: string;
   glow: string;
+  /** 잔상(trail) 색 */
+  trail: string;
+  /** 0보다 크면 벽돌을 부술 때마다 이 반경으로 폭발한다 */
+  explosionRadius?: number;
+  explosionDamage?: number;
 }
 
 export const BALL_STATS: Record<BallType, BallStats> = {
@@ -40,6 +45,7 @@ export const BALL_STATS: Record<BallType, BallStats> = {
     pierce: false,
     color: '#eef4ff',
     glow: 'rgba(120, 190, 255, 0.55)',
+    trail: '#ffffff',
   },
   heavy: {
     label: '중량 구체',
@@ -49,6 +55,7 @@ export const BALL_STATS: Record<BallType, BallStats> = {
     pierce: false,
     color: '#ffd98a',
     glow: 'rgba(247, 181, 56, 0.55)',
+    trail: '#f7b538',
   },
   pierce: {
     label: '관통 구체',
@@ -56,8 +63,21 @@ export const BALL_STATS: Record<BallType, BallStats> = {
     speed: 540,
     damage: 1,
     pierce: true,
-    color: '#9dff9c',
-    glow: 'rgba(110, 255, 140, 0.55)',
+    color: '#8ad8ff',
+    glow: 'rgba(56, 189, 248, 0.6)',
+    trail: '#38bdf8',
+  },
+  bomb: {
+    label: '폭탄 구체',
+    radius: 11,
+    speed: 420,
+    damage: 1,
+    pierce: false,
+    color: '#ffb066',
+    glow: 'rgba(255, 138, 61, 0.65)',
+    trail: '#ff8a3d',
+    explosionRadius: 74,
+    explosionDamage: 2,
   },
   split: {
     label: '분열 구체',
@@ -67,6 +87,7 @@ export const BALL_STATS: Record<BallType, BallStats> = {
     pierce: false,
     color: '#ff9de2',
     glow: 'rgba(255, 157, 226, 0.55)',
+    trail: '#ff9de2',
   },
 };
 
@@ -90,8 +111,12 @@ export interface RewardCard extends DeckCard {
 /* Brick                                                               */
 /* ------------------------------------------------------------------ */
 
-/** 일반 / 단단함 / 핵심 */
-export type BrickType = 'normal' | 'tough' | 'core';
+/** 일반 / 단단함 / 핵심 / 폭탄 */
+export type BrickType = 'normal' | 'tough' | 'core' | 'bomb';
+
+/** 폭탄 벽돌이 파괴될 때의 폭발 반경과 주변 피해량 */
+export const BOMB_BRICK_RADIUS = 96;
+export const BOMB_BRICK_DAMAGE = 2;
 
 /**
  * 벽돌의 데이터 계약. `engine/entities/Brick.ts` 의 클래스가 이 형태를 구현하며,
@@ -171,6 +196,10 @@ export interface GameState {
   /** 현재 턴에 뽑힌 카드 (없으면 null) */
   currentCard: DeckCard | null;
   bricksRemaining: number;
+  /** 현재 턴에서 공이 바닥에 떨어지기 전까지 누적된 연속 타격 수 */
+  combo: number;
+  /** 이번 판 최고 콤보 */
+  bestCombo: number;
   /** phase === 'REWARD' 일 때 제시되는 선택지 */
   rewardChoices: RewardCard[];
   /**
@@ -189,6 +218,8 @@ export const createInitialGameState = (): GameState => ({
   drawPileCount: 0,
   currentCard: null,
   bricksRemaining: 0,
+  combo: 0,
+  bestCombo: 0,
   rewardChoices: [],
   turnsUntilDeadline: -1,
 });

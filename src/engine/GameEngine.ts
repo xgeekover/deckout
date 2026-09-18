@@ -8,8 +8,11 @@
  *    값이 실제로 바뀐 프레임에만 방출한다 (60fps React 리렌더 방지).
  */
 
+import { FloatingTextSystem } from './FloatingText';
 import { ParticleSystem } from './ParticleSystem';
+import { ScreenShake } from './ScreenShake';
 import {
+  circleVsRect,
   clamp,
   ensureMinHorizontalSpeed,
   ensureMinVerticalSpeed,
@@ -25,6 +28,8 @@ import { Brick } from './entities/Brick';
 import { Paddle } from './entities/Paddle';
 import {
   BALL_STATS,
+  BOMB_BRICK_DAMAGE,
+  BOMB_BRICK_RADIUS,
   DEFAULT_GRID,
   GAME_HEIGHT,
   GAME_WIDTH,
@@ -35,6 +40,7 @@ import type {
   BallType,
   Brick as BrickModel,
   BrickGridConfig,
+  BrickType,
   DeckCard,
   GameState,
   RewardCard,
@@ -52,6 +58,41 @@ export const DEADLINE_Y = PADDLE_Y - DEADLINE_OFFSET;
 
 /** 벽돌 하강 슬라이드 시간(초) */
 const SLIDE_DURATION = 0.34;
+
+/* ------------------------------------------------------------------ */
+/* 연출 튜닝값                                                          */
+/* ------------------------------------------------------------------ */
+
+/** 화면 흔들림: [강도(px), 지속시간(ms)] */
+const SHAKE_BRICK_HIT: [number, number] = [1.5, 70];
+const SHAKE_BRICK_DESTROY: [number, number] = [2.6, 100];
+const SHAKE_EXPLOSION: [number, number] = [9, 250];
+const SHAKE_PADDLE: [number, number] = [4, 150];
+const SHAKE_BALL_LOST: [number, number] = [4, 150];
+
+/**
+ * GAME_OVER / VICTORY 로 넘어간 뒤 루프를 실제로 멈추기까지의 여유(초).
+ * 곧바로 stop() 하면 그 순간 걸려 있던 흔들림이 감쇠할 프레임을 못 얻어
+ * 0이 아닌 오프셋으로 영구 고정되고, 이후 resize() 가 부르는 render() 마다
+ * 장면이 어긋난 채로 그려진다. 파티클/셰이크가 마무리될 시간을 준다.
+ */
+const TERMINAL_SETTLE_SECONDS = 0.7;
+
+/** 히트스탑 길이(초) */
+const HITSTOP_BRICK_DESTROY = 0.032;
+const HITSTOP_EXPLOSION = 0.05;
+
+/** 이 콤보부터 팝업을 띄운다 */
+const COMBO_POPUP_MIN = 3;
+/** 폭탄 연쇄 폭발 횟수 상한 (무한 연쇄 방지) */
+const MAX_CHAIN_BLASTS = 24;
+
+interface Blast {
+  x: number;
+  y: number;
+  radius: number;
+  damage: number;
+}
 
 /**
  * 한 턴의 최대 길이(초). 어떤 이유로든 공이 끝없이 랠리를 이어가면 턴을 강제 종료한다.
@@ -143,6 +184,12 @@ const REWARD_POOL: Array<Omit<RewardCard, 'id'>> = [
     description: '벽돌을 뚫고 지나간다. 한 줄을 통째로.',
     rarity: 'rare',
   },
+  {
+    ballType: 'bomb',
+    name: '폭탄 구체',
+    description: '부순 자리에서 폭발해 주변까지 쓸어버린다.',
+    rarity: 'rare',
+  },
 ];
 
 export type EngineListener = (state: GameState) => void;
@@ -163,6 +210,18 @@ export class GameEngine {
   /** this.bricks 와 인덱스가 1:1 인 충돌용 rect 캐시 (서브스텝마다 재생성하지 않기 위함) */
   private brickRects: Rect[] = [];
   private particles = new ParticleSystem();
+  private floating = new FloatingTextSystem();
+  private shake = new ScreenShake();
+  /** 남은 히트스탑 시간(초). 0보다 크면 물리/파티클이 멈춘다. */
+  private hitStop = 0;
+  /** 0보다 크면 이 시간이 지난 뒤 루프를 멈춘다 (종료 연출 정산 창) */
+  private stopDelay = 0;
+  /** 현재 턴 누적 연속 타격 수 */
+  private combo = 0;
+  /** 한 번의 충돌 처리에서 모은 점수/파괴 여부/연쇄 폭발 */
+  private scoreBuffer = 0;
+  private destroyedBuffer = false;
+  private pendingBlasts: Blast[] = [];
 
   private hooks: EngineHooks = {};
   /** 턴 정산 중인 하강 애니메이션 진행 상태 */
@@ -221,6 +280,9 @@ export class GameEngine {
 
   stop(): void {
     this.running = false;
+    this.stopDelay = 0;
+    // 멈춘 뒤 resize() 가 render() 를 부를 수 있으므로 흔들림을 확실히 0으로 되돌린다.
+    this.shake.reset();
     if (this.rafId) cancelAnimationFrame(this.rafId);
     this.rafId = 0;
   }
@@ -317,6 +379,14 @@ export class GameEngine {
     this.paddle.x = GAME_WIDTH / 2;
     this.paddle.pointerTarget = null;
     this.particles.clear();
+    this.floating.clear();
+    this.shake.reset();
+    this.hitStop = 0;
+    this.stopDelay = 0;
+    this.combo = 0;
+    this.pendingBlasts.length = 0;
+    this.scoreBuffer = 0;
+    this.destroyedBuffer = false;
     this.notify();
     this.startWave();
   }
@@ -346,7 +416,7 @@ export class GameEngine {
       const baseHp = ROW_HP[Math.min(row, ROW_HP.length - 1)];
       const hp = baseHp + (baseHp > 1 ? waveBonus : 0);
       const y = this.grid.top + row * rowPitch(this.grid);
-      for (const brick of this.spawnRow(y, () => hp)) this.bricks.push(brick);
+      for (const brick of this.spawnRow(y, () => this.rollCell(hp, 0))) this.bricks.push(brick);
     }
     this.syncBrickRects();
   }
@@ -355,7 +425,10 @@ export class GameEngine {
    * y 위치에 한 행을 만든다. 폭/여백은 그리드 설정에서 매번 다시 계산하므로
    * cols 나 sideMargin 을 바꿔도 정확히 중앙 정렬된다.
    */
-  private spawnRow(y: number, hpFor: (col: number) => number): Brick[] {
+  private spawnRow(
+    y: number,
+    cellFor: (col: number) => { hp: number; type?: BrickType },
+  ): Brick[] {
     const { cols, gap, sideMargin, height } = this.grid;
     const usableWidth = FIELD.w - sideMargin * 2;
     const brickWidth = (usableWidth - gap * (cols - 1)) / cols;
@@ -364,9 +437,9 @@ export class GameEngine {
 
     const row: Brick[] = [];
     for (let col = 0; col < cols; col++) {
-      const hp = hpFor(col);
+      const { hp, type } = cellFor(col);
       if (hp <= 0) continue; // 빈 칸
-      row.push(new Brick(originX + col * (brickWidth + gap), y, brickWidth, height, hp));
+      row.push(new Brick(originX + col * (brickWidth + gap), y, brickWidth, height, hp, type));
     }
     return row;
   }
@@ -383,6 +456,16 @@ export class GameEngine {
     if (r < emptyChance + 0.18 + 0.3 * t) return 3 + Math.floor(t * 2);
     if (r < emptyChance + 0.5 + 0.2 * t) return 2 + Math.floor(t * 1.5);
     return 1;
+  }
+
+  /**
+   * HP 가 정해진 칸을 폭탄 벽돌로 승격할지 추첨한다.
+   * 턴이 오를수록 자주 나오지만, 연쇄가 과하면 판이 싱거워지므로 상한을 둔다.
+   */
+  private rollCell(hp: number, turn: number): { hp: number; type?: BrickType } {
+    if (hp <= 0) return { hp: 0 };
+    const chance = Math.min(0.05 + turn * 0.006, 0.14);
+    return Math.random() < chance ? { hp: 1, type: 'bomb' } : { hp };
   }
 
   private syncBrickRects(): void {
@@ -418,10 +501,13 @@ export class GameEngine {
     ball.attachTo(this.paddle.x, this.paddle.y);
     this.balls = [ball];
     this.aimAngle = -Math.PI / 2;
+    // 콤보는 패들 반사로는 끊기지 않고, 공을 잃어 턴이 끝날 때만 초기화된다.
+    this.combo = 0;
 
     this.patchState({
       phase: 'AIMING',
       currentCard: card,
+      combo: 0, // 웨이브 클리어로 턴이 끝난 경로에서도 확실히 초기화된다
       drawPileCount: this.drawPile.length,
       turn: { ...this.state.turn, canLaunch: true },
       turnsUntilDeadline: this.computeTurnsUntilDeadline(),
@@ -431,6 +517,7 @@ export class GameEngine {
 
   /** 공이 바닥을 완전히 벗어났을 때 호출된다. */
   private onBallLost(): void {
+    this.patchState({ combo: 0 });
     this.hooks.onBallLost?.(this.state.turn.currentTurn);
     this.beginTurnResolution();
   }
@@ -448,7 +535,9 @@ export class GameEngine {
 
     // 신규 행은 그리드 상단보다 한 칸 위에서 시작해 함께 미끄러져 들어온다.
     const turn = this.state.turn.currentTurn;
-    const incoming = this.spawnRow(this.grid.top - pitch, () => this.rollSpawnHp(turn));
+    const incoming = this.spawnRow(this.grid.top - pitch, () =>
+      this.rollCell(this.rollSpawnHp(turn), turn),
+    );
     for (const brick of incoming) {
       brick.beginSlide(pitch);
       this.bricks.push(brick);
@@ -505,15 +594,14 @@ export class GameEngine {
 
   private triggerGameOver(): void {
     this.balls = [];
-    this.particles.addTrauma(1);
+    this.shake.shake(...SHAKE_EXPLOSION);
     this.patchState({
       phase: 'GAME_OVER',
       currentCard: null,
       turn: { ...this.state.turn, canLaunch: false },
     });
-    // 훅이 엔진을 다시 건드릴 때 "phase 는 종료인데 루프는 도는" 상태를 보지 않도록
-    // stop() 을 먼저 부른다. 이번 프레임의 render() 는 그대로 실행되어 오버레이가 그려진다.
-    this.stop();
+    // 곧바로 멈추지 않고 정산 창을 둔다 (TERMINAL_SETTLE_SECONDS 주석 참고).
+    this.stopDelay = TERMINAL_SETTLE_SECONDS;
     this.hooks.onGameOver?.(this.state.turn.currentTurn, this.state.score);
   }
 
@@ -532,7 +620,7 @@ export class GameEngine {
         turnsUntilDeadline: -1,
         turn: { ...this.state.turn, canLaunch: false },
       });
-      this.stop();
+      this.stopDelay = TERMINAL_SETTLE_SECONDS;
       this.hooks.onVictory?.(this.state.turn.currentTurn, this.state.score);
       return;
     }
@@ -575,15 +663,40 @@ export class GameEngine {
     if (!Number.isFinite(delta) || delta < 0) delta = 0;
     if (delta > MAX_FRAME_TIME) delta = MAX_FRAME_TIME; // 탭 복귀 시 death-spiral 방지
 
+    // 종료 연출 정산 창이 끝나면 루프를 멈춘다. 이번 프레임은 끝까지 그린다.
+    if (this.stopDelay > 0) {
+      this.stopDelay -= delta;
+      if (this.stopDelay <= 0) this.stop();
+    }
+
+    // ── 히트스탑: 물리·파티클을 멈춘 채 셰이크만 돌려 타격을 "묵직하게" 만든다.
+    // accumulator 를 건드리지 않고 빠져나가므로, 멈춘 시간만큼 물리 시간이 흐르지 않는다
+    // (= time-scale 0). 누적해 뒀다가 몰아서 돌면 오히려 순간 가속이 되어버린다.
+    if (this.hitStop > 0) {
+      this.hitStop -= delta;
+      this.shake.update(delta);
+      this.render();
+      return;
+    }
+
     this.accumulator += delta;
     while (this.accumulator >= FIXED_STEP) {
       this.step(FIXED_STEP);
       this.accumulator -= FIXED_STEP;
+
+      // 서브스텝 도중 강한 타격이 나오면 이번 프레임의 남은 서브스텝도 즉시 멈춘다.
+      // 남은 누적 시간은 버린다 — 모아 뒀다가 몰아 돌리면 정지 직후 순간 가속이 된다.
+      if (this.hitStop > 0) {
+        this.accumulator = 0;
+        break;
+      }
     }
 
     this.particles.update(delta);
+    this.floating.update(delta);
+    this.shake.update(delta);
     for (const brick of this.bricks) brick.update(delta);
-    for (const ball of this.balls) ball.recordTrail();
+    for (const ball of this.balls) ball.recordHistory();
 
     this.render();
   };
@@ -622,8 +735,8 @@ export class GameEngine {
       // 공이 바닥을 "완전히" 벗어나면 낙하 처리.
       if (ball.isBelow(FIELD.y + FIELD.h)) {
         ball.alive = false;
-        this.particles.burst(ball.x, GAME_HEIGHT - 4, 14, '#ff6b6b', { speed: 220, gravity: -120 });
-        this.particles.addTrauma(0.35);
+        this.particles.ballLost(ball.x, GAME_HEIGHT - 4);
+        this.shake.shake(...SHAKE_BALL_LOST);
       }
     }
 
@@ -650,8 +763,7 @@ export class GameEngine {
     if (hits.length === 0) return;
 
     ball.setVelocity(ensureMinVerticalSpeed(withSpeed(velocity, ball.baseSpeed)));
-    this.particles.burst(ball.x, ball.y, 6, BALL_STATS[ball.type].color, { speed: 130 });
-    this.particles.addTrauma(0.08);
+    this.particles.sparks(ball.x, ball.y, BALL_STATS[ball.type].color);
   }
 
   private collidePaddle(ball: Ball): void {
@@ -679,8 +791,15 @@ export class GameEngine {
       ball.setVelocity(withSpeed(hit.velocity, ball.baseSpeed));
     }
 
-    this.particles.burst(ball.x, rect.y, 12, '#8be9ff', { speed: 210, spread: Math.PI, gravity: 260 });
-    this.particles.addTrauma(0.12);
+    this.particles.emit(ball.x, rect.y, 12, '#8be9ff', {
+      speed: 230,
+      spread: Math.PI,
+      direction: -Math.PI / 2,
+      life: 0.34,
+      gravity: 300,
+      drag: 2.2,
+    });
+    this.shake.shake(...SHAKE_PADDLE);
   }
 
   /**
@@ -694,8 +813,7 @@ export class GameEngine {
     const resolved = resolveCircleVsRects(ball.circle, ball.velocity, this.brickRects);
     if (!resolved) return;
 
-    let destroyedAny = false;
-    let gainedScore = 0;
+    const stats = BALL_STATS[ball.type];
 
     for (const { index, result } of resolved.contacts) {
       const brick = this.bricks[index];
@@ -704,35 +822,29 @@ export class GameEngine {
       if (!ball.canHit(brick.id)) continue;
 
       ball.markHit(brick.id);
-      const destroyed = brick.hit(ball.damage);
-
-      this.particles.burst(
+      const destroyed = this.damageBrick(
+        brick,
+        ball.damage,
         result.collision.contact.x,
         result.collision.contact.y,
-        destroyed ? 22 : 8,
-        destroyed ? brick.tier.edge : '#ffffff',
-        { speed: destroyed ? 260 : 150 },
       );
-      this.particles.addTrauma(destroyed ? 0.3 : 0.12);
 
-      if (destroyed) {
-        destroyedAny = true;
-        gainedScore += 100 * brick.maxHp;
-        this.hooks.onBrickDestroyed?.(brick.toModel());
+      // 폭탄 구체는 벽돌을 부술 때마다 타격 지점에서 터진다.
+      if (destroyed && stats.explosionRadius) {
+        this.pendingBlasts.push({
+          x: result.collision.contact.x,
+          y: result.collision.contact.y,
+          radius: stats.explosionRadius,
+          damage: stats.explosionDamage ?? 1,
+        });
       }
     }
 
-    if (destroyedAny) {
-      this.bricks = this.bricks.filter((b) => !b.isDestroyed);
-      this.syncBrickRects();
-      this.patchState({
-        score: this.state.score + gainedScore,
-        bricksRemaining: this.bricks.length,
-      });
-    }
+    this.resolveBlasts();
+    const cleared = this.flushBrickChanges();
 
     // 마지막 벽돌이었다면 공이 떨어질 때까지 기다리지 않고 즉시 웨이브를 끝낸다.
-    if (this.bricks.length === 0) {
+    if (cleared) {
       this.clearWave();
       return;
     }
@@ -740,9 +852,107 @@ export class GameEngine {
     // 관통 구체는 벽돌을 뚫고 지나가므로 위치 보정/반사를 하지 않는다.
     if (ball.pierce) return;
 
-    ball.x = resolved.position.x;
-    ball.y = resolved.position.y;
-    ball.setVelocity(ensureMinVerticalSpeed(withSpeed(resolved.velocity, ball.baseSpeed)));
+    // resolved 는 피해를 주기 "전" 기하로 계산한 값이다. 그 사이 폭발이 그 벽돌들을
+    // 날려버렸을 수 있으므로, 살아남은 벽돌로 반사를 다시 계산한다.
+    // 그러지 않으면 이미 사라진 벽돌에 튕기는 유령 반사가 생긴다.
+    const bounce = resolveCircleVsRects(ball.circle, ball.velocity, this.brickRects);
+    if (!bounce) return; // 부딪힐 것이 남지 않았다 — 그대로 지나간다
+
+    ball.x = bounce.position.x;
+    ball.y = bounce.position.y;
+    ball.setVelocity(ensureMinVerticalSpeed(withSpeed(bounce.velocity, ball.baseSpeed)));
+  }
+
+  /* ---------------------------------------------------------------- */
+  /* 타격 연출 (파티클 · 셰이크 · 히트스탑 · 콤보)                        */
+  /* ---------------------------------------------------------------- */
+
+  /**
+   * 벽돌 하나에 피해를 주고 그에 맞는 연출을 낸다.
+   * 직접 타격과 폭발 피해 양쪽이 이 경로를 공유한다.
+   */
+  private damageBrick(brick: Brick, damage: number, cx: number, cy: number): boolean {
+    if (brick.isDestroyed) return false;
+
+    const destroyed = brick.hit(damage);
+    const center = brick.center;
+
+    // 콤보는 "벽돌을 때린 횟수". 폭발에 휩쓸린 벽돌도 포함된다.
+    this.combo += 1;
+    this.floating.spawnDamage(cx, cy, damage, brick.tier.text);
+    if (this.combo >= COMBO_POPUP_MIN && this.combo % 2 === 1) {
+      this.floating.spawnCombo(cx, cy - 34, this.combo);
+    }
+
+    if (destroyed) {
+      this.destroyedBuffer = true;
+      this.scoreBuffer += 100 * brick.maxHp;
+      this.particles.debris(center.x, center.y, brick.tier.edge);
+      this.shake.shake(...SHAKE_BRICK_DESTROY);
+      this.requestHitStop(HITSTOP_BRICK_DESTROY);
+      this.hooks.onBrickDestroyed?.(brick.toModel());
+
+      // 폭탄 벽돌은 파괴되면서 주변을 휩쓴다 (연쇄 가능).
+      if (brick.isBomb) {
+        this.pendingBlasts.push({
+          x: center.x,
+          y: center.y,
+          radius: BOMB_BRICK_RADIUS,
+          damage: BOMB_BRICK_DAMAGE,
+        });
+      }
+    } else {
+      this.particles.sparks(cx, cy, '#ffffff');
+      this.shake.shake(...SHAKE_BRICK_HIT);
+    }
+
+    return destroyed;
+  }
+
+  /** 대기 중인 폭발을 큐로 처리한다. 연쇄는 MAX_CHAIN_BLASTS 회로 제한. */
+  private resolveBlasts(): void {
+    let processed = 0;
+    while (this.pendingBlasts.length > 0 && processed < MAX_CHAIN_BLASTS) {
+      const blast = this.pendingBlasts.shift() as Blast;
+      processed++;
+
+      this.particles.explosion(blast.x, blast.y, blast.radius);
+      this.floating.spawnBoom(blast.x, blast.y);
+      this.shake.shake(...SHAKE_EXPLOSION);
+      this.requestHitStop(HITSTOP_EXPLOSION);
+
+      const circle = { x: blast.x, y: blast.y, r: blast.radius };
+      // 배열을 복사해서 순회한다 — damageBrick 이 pendingBlasts 를 늘릴 수 있다.
+      for (const brick of [...this.bricks]) {
+        if (brick.isDestroyed) continue;
+        if (!circleVsRect(circle, brick.rect)) continue;
+        this.damageBrick(brick, blast.damage, brick.center.x, brick.center.y);
+      }
+    }
+    this.pendingBlasts.length = 0;
+  }
+
+  /** 누적된 점수/파괴를 상태에 반영한다. 웨이브가 비었으면 true. */
+  private flushBrickChanges(): boolean {
+    if (this.destroyedBuffer) {
+      this.bricks = this.bricks.filter((b) => !b.isDestroyed);
+      this.syncBrickRects();
+    }
+
+    this.patchState({
+      score: this.state.score + this.scoreBuffer,
+      bricksRemaining: this.bricks.length,
+      combo: this.combo,
+      bestCombo: Math.max(this.state.bestCombo, this.combo),
+    });
+
+    this.scoreBuffer = 0;
+    this.destroyedBuffer = false;
+    return this.bricks.length === 0;
+  }
+
+  private requestHitStop(seconds: number): void {
+    this.hitStop = Math.max(this.hitStop, seconds);
   }
 
   /* ---------------------------------------------------------------- */
@@ -751,21 +961,20 @@ export class GameEngine {
 
   private render(): void {
     const ctx = this.ctx;
-    const shake = this.particles.shakeOffset;
+    const shake = this.shake.offset;
 
     // canvas.width/height 는 이미 디바이스 픽셀이다. 변환이 걸린 채 지우면
     // dpr 이 한 번 더 곱해져 dpr < 1 인 환경에서 우/하단이 지워지지 않는다.
+    // 지우기는 흔들림 밖에서 해야 화면 가장자리에 잔상이 남지 않는다.
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
-    ctx.setTransform(
-      this.dpr * this.scale,
-      0,
-      0,
-      this.dpr * this.scale,
-      this.dpr * this.scale * shake.x,
-      this.dpr * this.scale * shake.y,
-    );
+    // ── 흔들림 구간 시작
+    ctx.save();
+    const unit = this.dpr * this.scale;
+    ctx.setTransform(unit, 0, 0, unit, 0, 0);
+    // 논리 좌표계 위에서 흔들기 때문에 캔버스 크기가 달라져도 체감 강도가 같다.
+    ctx.translate(shake.x, shake.y);
 
     this.drawBackground(ctx);
     this.drawDeadline(ctx);
@@ -774,7 +983,14 @@ export class GameEngine {
     for (const ball of this.balls) ball.draw(ctx);
     this.particles.draw(ctx);
 
+    this.floating.draw(ctx);
+
     if (this.state.phase === 'AIMING') this.drawAimHint(ctx);
+
+    ctx.restore(); // ── 흔들림 구간 끝
+
+    // 오버레이는 흔들림 밖에서 그린다 (게임오버 텍스트까지 떨면 읽기 어렵다).
+    ctx.setTransform(unit, 0, 0, unit, 0, 0);
     if (this.state.phase === 'GAME_OVER') {
       this.drawOverlay(ctx, 'GAME OVER', `턴 ${this.state.turn.currentTurn} · 점수 ${this.state.score.toLocaleString()}`, '#ff6b6b');
     } else if (this.state.phase === 'VICTORY') {

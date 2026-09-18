@@ -77,6 +77,8 @@ export function HUD({ state, lastRun, onRestart }: HUDProps) {
         <Stat label="남은 벽돌" value={state.bricksRemaining} />
       </section>
 
+      <ComboMeter combo={state.combo} best={state.bestCombo} />
+
       <DeadlineMeter turns={state.turnsUntilDeadline} />
 
       <section className="rounded-xl border border-deck-edge bg-deck-panel/60 p-4">
@@ -141,6 +143,37 @@ export function HUD({ state, lastRun, onRestart }: HUDProps) {
         새 게임
       </button>
     </aside>
+  );
+}
+
+/**
+ * 현재 콤보. 3타부터 강조되고, 숫자가 바뀔 때마다 살짝 튀어오른다.
+ * 콤보는 패들 반사로는 끊기지 않고 공을 잃을 때만 0으로 돌아간다.
+ */
+function ComboMeter({ combo, best }: { combo: number; best: number }) {
+  const hot = combo >= 3;
+  return (
+    <section
+      className={`rounded-xl border bg-deck-panel/60 p-4 transition-colors ${
+        hot ? 'border-deck-gold/70' : 'border-deck-edge'
+      }`}
+    >
+      <div className="flex items-baseline justify-between">
+        <span className="text-xs uppercase tracking-wider text-slate-400">콤보</span>
+        <span className="text-[11px] text-slate-500">최고 {best}</span>
+      </div>
+      <div className="mt-1 flex items-baseline gap-1.5">
+        <span
+          key={combo}
+          className={`text-2xl font-extrabold tabular-nums ${
+            hot ? 'animate-[combo-pop_220ms_ease-out] text-deck-gold' : 'text-slate-300'
+          }`}
+        >
+          {combo}
+        </span>
+        <span className="text-xs text-slate-500">연속 타격</span>
+      </div>
+    </section>
   );
 }
 

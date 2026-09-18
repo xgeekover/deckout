@@ -2,7 +2,8 @@ import { BALL_STATS } from '../../types/game';
 import type { BallType, Vec2 } from '../../types/game';
 import type { Circle } from '../Physics';
 
-const TRAIL_LENGTH = 12;
+/** 잔상으로 남길 최근 프레임 수 */
+const HISTORY_LENGTH = 8;
 
 export class Ball {
   x: number;
@@ -19,7 +20,8 @@ export class Ball {
   launched = false;
   alive = true;
 
-  private trail: Vec2[] = [];
+  /** 최근 HISTORY_LENGTH 프레임의 위치 큐 (오래된 것이 앞) */
+  readonly history: Vec2[] = [];
   /** brickId -> 남은 쿨다운(초). 관통 구체가 한 벽돌을 매 서브스텝 때리는 것을 막는다. */
   private hitCooldowns = new Map<number, number>();
 
@@ -70,7 +72,7 @@ export class Ball {
     this.vy = 0;
     this.launched = false;
     this.alive = true;
-    this.trail.length = 0;
+    this.history.length = 0;
     this.hitCooldowns.clear();
   }
 
@@ -93,25 +95,28 @@ export class Ball {
     this.hitCooldowns.set(brickId, seconds);
   }
 
-  recordTrail(): void {
-    this.trail.push({ x: this.x, y: this.y });
-    if (this.trail.length > TRAIL_LENGTH) this.trail.shift();
+  /** 프레임마다 호출해 현재 위치를 잔상 큐에 넣는다. */
+  recordHistory(): void {
+    this.history.push({ x: this.x, y: this.y });
+    if (this.history.length > HISTORY_LENGTH) this.history.shift();
   }
 
   draw(ctx: CanvasRenderingContext2D): void {
     const stats = BALL_STATS[this.type];
 
-    // 잔상
-    for (let i = 0; i < this.trail.length; i++) {
-      const p = this.trail[i];
-      const t = (i + 1) / this.trail.length;
+    // 잔상 — 오래된 위치일수록 작고 옅게. 볼 타입별 색을 쓴다.
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.fillStyle = stats.trail;
+    for (let i = 0; i < this.history.length; i++) {
+      const p = this.history[i];
+      const t = (i + 1) / this.history.length; // 0(가장 오래됨) ~ 1(가장 최근)
+      ctx.globalAlpha = t * t * 0.42;
       ctx.beginPath();
-      ctx.fillStyle = stats.glow;
-      ctx.globalAlpha = t * 0.35;
-      ctx.arc(p.x, p.y, this.radius * t * 0.9, 0, Math.PI * 2);
+      ctx.arc(p.x, p.y, this.radius * (0.25 + t * 0.7), 0, Math.PI * 2);
       ctx.fill();
     }
-    ctx.globalAlpha = 1;
+    ctx.restore();
 
     ctx.save();
     ctx.shadowColor = stats.glow;

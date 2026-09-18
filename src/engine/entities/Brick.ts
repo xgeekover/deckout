@@ -20,6 +20,13 @@ const HP_TIERS: Tier[] = [
   { base: '#9e3d3d', edge: '#ff9f9f', glow: 'rgba(255, 159, 159, 0.48)', text: '#ffecec' }, // hp 5+
 ];
 
+const BOMB_TIER: Tier = {
+  base: '#8a3520',
+  edge: '#ff9a4d',
+  glow: 'rgba(255, 154, 77, 0.55)',
+  text: '#fff0e0',
+};
+
 const tierFor = (hp: number): Tier => HP_TIERS[Math.min(Math.max(hp, 1), HP_TIERS.length) - 1];
 
 /** maxHp 로 벽돌의 분류를 정한다. */
@@ -44,7 +51,14 @@ export class Brick implements BrickModel {
   private slideFromY = 0;
   private slideToY = 0;
 
-  constructor(x: number, y: number, width: number, height: number, hp: number) {
+  constructor(
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+    hp: number,
+    type?: BrickType,
+  ) {
     this.id = brickSeq++;
     this.x = x;
     this.y = y;
@@ -52,7 +66,7 @@ export class Brick implements BrickModel {
     this.height = height;
     this.hp = hp;
     this.maxHp = hp;
-    this.type = classifyBrick(hp);
+    this.type = type ?? classifyBrick(hp);
     // 슬라이드를 한 번도 하지 않은 벽돌도 settledY 가 현재 위치를 가리켜야 한다.
     this.slideFromY = y;
     this.slideToY = y;
@@ -67,7 +81,11 @@ export class Brick implements BrickModel {
   }
 
   get tier(): Tier {
-    return tierFor(this.hp);
+    return this.type === 'bomb' ? BOMB_TIER : tierFor(this.hp);
+  }
+
+  get isBomb(): boolean {
+    return this.type === 'bomb';
   }
 
   /** 엔진 바깥(훅/UI)으로 넘길 때 쓰는 순수 데이터 스냅샷 */
@@ -144,8 +162,37 @@ export class Brick implements BrickModel {
     ctx.lineWidth = this.maxHp > 1 ? 2 : 1;
     ctx.stroke();
 
+    if (this.isBomb) {
+      // 맥동하는 외곽 글로우 — "이건 터진다"는 신호
+      const pulse = 0.55 + 0.45 * Math.sin(performance.now() / 180);
+      ctx.shadowColor = glow;
+      ctx.shadowBlur = 10 + 12 * pulse;
+      ctx.strokeStyle = edge;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+
+      // 폭탄 글리프
+      const cx = x + w / 2;
+      const cy = y + h / 2 + 1;
+      ctx.fillStyle = '#1a0d07';
+      ctx.beginPath();
+      ctx.arc(cx, cy, 6.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = text;
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.moveTo(cx + 3.5, cy - 5.5);
+      ctx.quadraticCurveTo(cx + 8, cy - 10, cx + 5, cy - 12);
+      ctx.stroke();
+      ctx.fillStyle = `rgba(255, 214, 120, ${0.5 + 0.5 * pulse})`;
+      ctx.beginPath();
+      ctx.arc(cx + 5, cy - 12.5, 2 + pulse, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
     // 하단 체력 바 — 남은 비율을 한눈에
-    if (this.maxHp > 1) {
+    if (!this.isBomb && this.maxHp > 1) {
       const ratio = this.hp / this.maxHp;
       ctx.fillStyle = 'rgba(0,0,0,0.45)';
       ctx.fillRect(x + 4, y + h - 5, w - 8, 3);
