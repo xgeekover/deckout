@@ -25,8 +25,12 @@ export default function App() {
     });
   }, []);
 
-  const handleChooseReward = useCallback((cardId: string) => {
-    engineRef.current?.chooseReward(cardId);
+  const handleChooseReward = useCallback((itemId: string) => {
+    engineRef.current?.chooseReward(itemId);
+  }, []);
+
+  const handleSkipReward = useCallback(() => {
+    engineRef.current?.skipReward();
   }, []);
 
   const handleRestart = useCallback(() => {
@@ -43,6 +47,7 @@ export default function App() {
             wave={state.wave}
             choices={state.rewardChoices}
             onChoose={handleChooseReward}
+            onSkip={handleSkipReward}
           />
         )}
 

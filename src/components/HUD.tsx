@@ -1,5 +1,5 @@
 import { BALL_STATS } from '../types/game';
-import type { BallType, DeckCard, GameState } from '../types/game';
+import type { BallType, DeckCard, GameState, Rarity, Relic } from '../types/game';
 
 /** 직전 판의 결과 — 엔진의 onGameOver / onVictory 훅으로 채워진다. */
 export interface RunResult {
@@ -55,6 +55,9 @@ function countByType(deck: DeckCard[]): Array<[BallType, number]> {
 /** 남은 덱 · 현재 턴 · 데드라인까지 남은 턴 표시 */
 export function HUD({ state, lastRun, onRestart }: HUDProps) {
   const current = state.currentCard;
+  // 분모는 영구 덱 장수가 아니라 "지금 순환 중인 카드 전체"다.
+  // 재활용 루틴이 만든 임시 카드는 deck 에 없어서, deck.length 로 나누면 9 / 5 같은 값이 나온다.
+  const cycleTotal = state.drawPileCount + state.discardPileCount + (current ? 1 : 0);
 
   return (
     <aside className="flex w-full flex-col gap-4 lg:w-72">
@@ -70,8 +73,24 @@ export function HUD({ state, lastRun, onRestart }: HUDProps) {
         <p className="mt-1 text-xs text-slate-400">벽돌깨기 × 덱빌딩 로그라이트</p>
       </header>
 
+      <section className="flex items-center justify-between rounded-xl border border-deck-accent/40 bg-deck-panel/60 px-4 py-3">
+        <div>
+          <div className="text-[11px] uppercase tracking-wider text-slate-400">현재 웨이브</div>
+          <div className="text-xl font-extrabold tracking-tight text-deck-accent">
+            Wave {state.wave}
+          </div>
+        </div>
+        {state.wavePattern && (
+          <span className="rounded-full border border-deck-edge px-2.5 py-1 text-[11px] text-slate-300">
+            {state.wavePattern}
+          </span>
+        )}
+      </section>
+
+      <RelicBar relics={state.relics} charges={state.relicCharges} />
+
       <section className="grid grid-cols-2 gap-3">
-        <Stat label="웨이브" value={state.wave} />
+        <Stat label="버린 카드" value={state.discardPileCount} />
         <Stat label="턴" value={state.turn.currentTurn} />
         <Stat label="점수" value={state.score.toLocaleString()} />
         <Stat label="남은 벽돌" value={state.bricksRemaining} />
@@ -86,7 +105,7 @@ export function HUD({ state, lastRun, onRestart }: HUDProps) {
           <span className="text-xs uppercase tracking-wider text-slate-400">현재 카드</span>
           <span className="text-xs text-slate-400">
             남은 카드 <b className="tabular-nums text-deck-gold">{state.drawPileCount}</b> /{' '}
-            {state.deck.length}
+            {cycleTotal}
           </span>
         </div>
         {current ? (
@@ -97,7 +116,14 @@ export function HUD({ state, lastRun, onRestart }: HUDProps) {
               boxShadow: `inset 0 0 22px ${BALL_STATS[current.ballType].glow}`,
             }}
           >
-            <div className="text-sm font-semibold text-slate-100">{current.name}</div>
+            <div className="flex items-center gap-2 text-sm font-semibold text-slate-100">
+              {current.name}
+              {current.temporary && (
+                <span className="rounded-full border border-fuchsia-400/60 px-1.5 text-[9px] font-medium text-fuchsia-200">
+                  임시
+                </span>
+              )}
+            </div>
             <p className="mt-1 text-xs leading-relaxed text-slate-400">{current.description}</p>
           </div>
         ) : (
@@ -121,7 +147,7 @@ export function HUD({ state, lastRun, onRestart }: HUDProps) {
         <ul className="mt-1.5 space-y-1">
           <li>마우스 이동 · ← → · A/D — 패들</li>
           <li>클릭 · Space — 발사</li>
-          <li>R — 재시작</li>
+          <li>R — 재시작 (게임 오버 · 승리 화면)</li>
         </ul>
       </section>
 
@@ -143,6 +169,74 @@ export function HUD({ state, lastRun, onRestart }: HUDProps) {
         새 게임
       </button>
     </aside>
+  );
+}
+
+const RELIC_RING: Record<Rarity, string> = {
+  COMMON: 'border-slate-500/70',
+  RARE: 'border-deck-gold/70',
+  LEGENDARY: 'border-fuchsia-400/70',
+};
+
+/**
+ * 보유 유물 아이콘 바. 아이콘에 마우스를 올리거나 포커스하면 이름·효과 툴팁이 뜬다.
+ * 웨이브당 1회성 유물은 충전을 다 쓰면 흐려진다.
+ */
+function RelicBar({ relics, charges }: { relics: Relic[]; charges: Record<string, number> }) {
+  return (
+    <section className="rounded-xl border border-deck-edge bg-deck-panel/60 p-4">
+      <div className="flex items-baseline justify-between">
+        <span className="text-xs uppercase tracking-wider text-slate-400">패시브 유물</span>
+        <span className="text-[11px] text-slate-500">{relics.length}개</span>
+      </div>
+
+      {relics.length === 0 ? (
+        <p className="mt-2 text-xs text-slate-500">웨이브를 클리어하면 얻을 수 있습니다.</p>
+      ) : (
+        <ul className="mt-2 flex flex-wrap gap-2">
+          {relics.map((relic) => {
+            const limited = relic.chargesPerWave !== undefined;
+            const left = charges[relic.id] ?? 0;
+            const spent = limited && left <= 0;
+            return (
+              <li key={relic.id} className="group relative">
+                <button
+                  type="button"
+                  aria-label={`${relic.name}: ${relic.description}`}
+                  data-relic-id={relic.id}
+                  className={`relative flex size-10 items-center justify-center rounded-xl border bg-white/5 text-xl transition hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-deck-accent ${RELIC_RING[relic.rarity]} ${spent ? 'opacity-35 grayscale' : ''}`}
+                >
+                  {relic.icon}
+                  {limited && (
+                    <span className="absolute -bottom-1 -right-1 rounded-full border border-deck-edge bg-deck-bg px-1 text-[9px] font-semibold tabular-nums text-slate-300">
+                      {left}
+                    </span>
+                  )}
+                </button>
+
+                <div
+                  role="tooltip"
+                  className="pointer-events-none absolute bottom-full left-0 z-20 mb-2 w-52 rounded-lg border border-deck-edge bg-deck-bg/95 p-3 text-left opacity-0 shadow-xl transition-opacity duration-150 group-focus-within:opacity-100 group-hover:opacity-100"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-semibold text-slate-100">{relic.name}</span>
+                    <span className="text-[9px] tracking-widest text-slate-500">{relic.rarity}</span>
+                  </div>
+                  <p className="mt-1 text-[11px] leading-relaxed text-slate-400">
+                    {relic.description}
+                  </p>
+                  {limited && (
+                    <p className="mt-1.5 text-[10px] text-deck-accent">
+                      이번 웨이브 남은 횟수 {left} / {relic.chargesPerWave}
+                    </p>
+                  )}
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </section>
   );
 }
 

@@ -5,7 +5,7 @@
  * 살아 있는 것만 남기는 단순 배열로 관리한다.
  */
 
-export type FloatingKind = 'damage' | 'boom' | 'combo';
+export type FloatingKind = 'damage' | 'boom' | 'combo' | 'notice';
 
 const EASE_BACK_C1 = 1.70158;
 const EASE_BACK_C3 = EASE_BACK_C1 + 1;
@@ -38,7 +38,7 @@ export class FloatingText {
     this.x = x;
     this.y = y;
     this.vx = (Math.random() - 0.5) * 26;
-    this.vy = kind === 'combo' ? -44 : -76;
+    this.vy = kind === 'combo' || kind === 'notice' ? -44 : -76;
     this.text = text;
     this.color = color;
     this.size = size;
@@ -67,7 +67,8 @@ export class FloatingText {
 
     // 등장 직후 0.18초 동안 튀어 오르는 스케일 팝
     const popT = Math.min(age / 0.18, 1);
-    const pop = this.kind === 'combo' ? 0.45 + 0.55 * easeOutBack(popT) : 0.8 + 0.2 * popT;
+    const pops = this.kind === 'combo' || this.kind === 'notice';
+    const pop = pops ? 0.45 + 0.55 * easeOutBack(popT) : 0.8 + 0.2 * popT;
     // 수명의 마지막 45% 구간에서 서서히 사라진다
     const alpha = Math.min(1, remain / 0.45);
 
@@ -129,6 +130,11 @@ export class FloatingTextSystem {
     const size = Math.min(26 + count * 1.8, 46);
     const color = count >= 10 ? '#ff7a7a' : count >= 6 ? '#ffb066' : '#f7d558';
     this.push(new FloatingText(x, y, `${count} COMBO!`, color, size, 'combo', 0.95));
+  }
+
+  /** 유물 발동 등 시스템 알림 */
+  spawnNotice(x: number, y: number, text: string, color = '#7ef0ff'): void {
+    this.push(new FloatingText(x, y, text, color, 22, 'notice', 1.1));
   }
 
   update(dt: number): void {

@@ -19,6 +19,8 @@ export class Ball {
   /** 아직 발사되지 않았으면 패들 위에 붙어 있다 */
   launched = false;
   alive = true;
+  /** 이번 낙하에서 유물(안전망 등)에게 이미 구조 기회를 줬는가 */
+  fallChecked = false;
 
   /** 최근 HISTORY_LENGTH 프레임의 위치 큐 (오래된 것이 앞) */
   readonly history: Vec2[] = [];
@@ -72,6 +74,7 @@ export class Ball {
     this.vy = 0;
     this.launched = false;
     this.alive = true;
+    this.fallChecked = false;
     this.history.length = 0;
     this.hitCooldowns.clear();
   }

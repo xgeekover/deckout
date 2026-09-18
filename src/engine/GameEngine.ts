@@ -10,7 +10,12 @@
 
 import { FloatingTextSystem } from './FloatingText';
 import { ParticleSystem } from './ParticleSystem';
+import { resolveModifiers } from './Relics';
+import type { ResolvedModifiers } from './Relics';
+import { rollRewards } from './Rewards';
 import { ScreenShake } from './ScreenShake';
+import { FULL, patternForWave, waveCellHp } from './WavePatterns';
+import type { WavePattern } from './WavePatterns';
 import {
   circleVsRect,
   clamp,
@@ -27,6 +32,7 @@ import { Ball } from './entities/Ball';
 import { Brick } from './entities/Brick';
 import { Paddle } from './entities/Paddle';
 import {
+  BALL_CARD_DATA,
   BALL_STATS,
   BOMB_BRICK_DAMAGE,
   BOMB_BRICK_RADIUS,
@@ -37,13 +43,15 @@ import {
   rowPitch,
 } from '../types/game';
 import type {
-  BallType,
   Brick as BrickModel,
   BrickGridConfig,
   BrickType,
+  BallData,
   DeckCard,
   GameState,
-  RewardCard,
+  Relic,
+  RelicContext,
+  RewardItem,
 } from '../types/game';
 
 const FIXED_STEP = 1 / 120;
@@ -82,6 +90,9 @@ const TERMINAL_SETTLE_SECONDS = 0.7;
 const HITSTOP_BRICK_DESTROY = 0.032;
 const HITSTOP_EXPLOSION = 0.05;
 
+/** 안전망이 공을 받아낸 뒤 번쩍이는 시간(초) */
+const NET_FLASH_SECONDS = 0.45;
+
 /** 이 콤보부터 팝업을 띄운다 */
 const COMBO_POPUP_MIN = 3;
 /** 폭탄 연쇄 폭발 횟수 상한 (무한 연쇄 방지) */
@@ -101,13 +112,10 @@ interface Blast {
 const MAX_TURN_SECONDS = 45;
 
 /** 이 웨이브를 클리어하면 VICTORY */
-const VICTORY_WAVE = 3;
+const VICTORY_WAVE = 10;
 
-/**
- * 행별 기본 HP (0번이 최상단). 위로 갈수록 단단하다.
- * 웨이브가 오르면 여기에 보정치가 더해진다.
- */
-const ROW_HP = [3, 2, 2, 1, 1];
+/** 유물 보정 전 패들 기본 너비 */
+const BASE_PADDLE_WIDTH = 130;
 
 /** 엔진이 바깥으로 알리는 게임플레이 이벤트 훅. */
 export interface EngineHooks {
@@ -119,8 +127,11 @@ export interface EngineHooks {
   onTurnEnd?: (turn: number) => void;
   /** 벽돌 하나가 파괴될 때마다 */
   onBrickDestroyed?: (brick: BrickModel) => void;
-  /** 필드의 벽돌을 모두 비웠을 때 */
-  onWaveClear?: (wave: number, remainingCards: number) => void;
+  /**
+   * 필드의 벽돌을 모두 비웠을 때. 추첨된 보상 선택지가 함께 전달된다
+   * (마지막 웨이브라 보상 없이 VICTORY 로 가는 경우 빈 배열).
+   */
+  onWaveClear?: (rewards: RewardItem[], wave: number) => void;
   /** 벽돌이 데드라인에 도달해 패배했을 때 */
   onGameOver?: (turn: number, score: number) => void;
   /** 목표 웨이브까지 클리어했을 때 */
@@ -150,47 +161,28 @@ function sameValue(a: unknown, b: unknown): boolean {
 }
 
 let cardSeq = 0;
-const makeCard = (ballType: BallType, name: string, description: string): DeckCard => ({
-  id: `card-${ballType}-${cardSeq++}`,
-  ballType,
-  name,
-  description,
+const makeCard = (ball: BallData, temporary = false): DeckCard => ({
+  ...ball,
+  id: `card-${ball.ballType}-${cardSeq++}`,
+  ...(temporary ? { temporary: true } : {}),
 });
 
 const STARTING_DECK = (): DeckCard[] => [
-  makeCard('normal', '기본 구체', '평범하지만 믿음직한 한 발.'),
-  makeCard('normal', '기본 구체', '평범하지만 믿음직한 한 발.'),
-  makeCard('normal', '기본 구체', '평범하지만 믿음직한 한 발.'),
-  makeCard('normal', '기본 구체', '평범하지만 믿음직한 한 발.'),
-  makeCard('heavy', '중량 구체', '느리지만 벽돌을 3 만큼 부순다.'),
+  makeCard(BALL_CARD_DATA.normal),
+  makeCard(BALL_CARD_DATA.normal),
+  makeCard(BALL_CARD_DATA.normal),
+  makeCard(BALL_CARD_DATA.normal),
+  makeCard(BALL_CARD_DATA.heavy),
 ];
 
-const REWARD_POOL: Array<Omit<RewardCard, 'id'>> = [
-  {
-    ballType: 'normal',
-    name: '기본 구체',
-    description: '덱을 두껍게 — 턴을 한 번 더 번다.',
-    rarity: 'common',
-  },
-  {
-    ballType: 'heavy',
-    name: '중량 구체',
-    description: '데미지 3. 단단한 벽돌 처리용.',
-    rarity: 'common',
-  },
-  {
-    ballType: 'pierce',
-    name: '관통 구체',
-    description: '벽돌을 뚫고 지나간다. 한 줄을 통째로.',
-    rarity: 'rare',
-  },
-  {
-    ballType: 'bomb',
-    name: '폭탄 구체',
-    description: '부순 자리에서 폭발해 주변까지 쓸어버린다.',
-    rarity: 'rare',
-  },
-];
+function shuffled<T>(items: readonly T[]): T[] {
+  const out = [...items];
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+}
 
 export type EngineListener = (state: GameState) => void;
 
@@ -218,6 +210,8 @@ export class GameEngine {
   private stopDelay = 0;
   /** 현재 턴 누적 연속 타격 수 */
   private combo = 0;
+  /** 안전망 발동 직후 번쩍임 타이머(초) */
+  private netFlash = 0;
   /** 한 번의 충돌 처리에서 모은 점수/파괴 여부/연쇄 폭발 */
   private scoreBuffer = 0;
   private destroyedBuffer = false;
@@ -235,22 +229,40 @@ export class GameEngine {
   private state: GameState = createInitialGameState();
   private listeners = new Set<EngineListener>();
 
-  /** 아직 뽑지 않은 카드 (덱의 부분집합) */
-  private drawPile: DeckCard[] = [];
+  /** 영구 보유 덱. 웨이브가 시작될 때마다 이걸 섞어 드로우 더미를 만든다. */
   private deck: DeckCard[] = [];
+  /** 아직 뽑지 않은 카드 */
+  private drawPile: DeckCard[] = [];
+  /** 이미 쓴 카드 + 웨이브 도중 생성된 임시 카드. 드로우 더미가 비면 섞여 들어간다. */
+  private discardPile: DeckCard[] = [];
+  /** 지금 필드에 나가 있는 공의 카드 */
+  private cardInPlay: DeckCard | null = null;
+
+  /** 보유 유물과 그 런타임 상태 */
+  private relics: Relic[] = [];
+  private relicCharges = new Map<string, number>();
+  private modifiers: ResolvedModifiers = resolveModifiers([]);
+  /** 유물 훅에 넘겨주는 엔진 조작 창구 */
+  private relicCtx: RelicContext;
 
   constructor(canvas: HTMLCanvasElement) {
     const ctx = canvas.getContext('2d');
     if (!ctx) throw new Error('2D 컨텍스트를 생성할 수 없습니다.');
     this.canvas = canvas;
     this.ctx = ctx;
-    this.paddle = new Paddle(GAME_WIDTH / 2, PADDLE_Y);
+    this.paddle = new Paddle(GAME_WIDTH / 2, PADDLE_Y, BASE_PADDLE_WIDTH);
+    this.relicCtx = this.createRelicContext();
     this.reset();
   }
 
   /* ---------------------------------------------------------------- */
   /* 외부 API (React 에서 호출)                                         */
   /* ---------------------------------------------------------------- */
+
+  /** 현재 phase (입력 계층이 키 처리 여부를 판단할 때 쓴다) */
+  get phase(): GameState['phase'] {
+    return this.state.phase;
+  }
 
   /** 웨이브 클리어 등 게임플레이 이벤트 훅을 등록한다. */
   setHooks(hooks: EngineHooks): void {
@@ -259,7 +271,11 @@ export class GameEngine {
 
   /** 벽돌 그리드 배치 파라미터를 바꾼다 (다음 웨이브부터 적용). */
   setGridConfig(config: Partial<BrickGridConfig>): void {
-    this.grid = { ...this.grid, ...config };
+    const next = { ...this.grid, ...config };
+    // 0행/0열이면 벽돌이 하나도 없는 웨이브가 되어 클리어 판정이 영영 오지 않는다.
+    next.rows = Math.max(1, Math.floor(next.rows));
+    next.cols = Math.max(1, Math.floor(next.cols));
+    this.grid = next;
   }
 
   subscribe(listener: EngineListener): () => void {
@@ -324,15 +340,43 @@ export class GameEngine {
     this.patchState({ phase: 'PLAYING', turn: { ...this.state.turn, canLaunch: false } });
   }
 
-  /** 보상 카드 선택 → 덱에 추가하고 다음 웨이브로. */
-  chooseReward(cardId: string): void {
+  /**
+   * 보상 선택 → 볼이면 덱에, 유물이면 보유 목록에 넣고 다음 웨이브를 시작한다.
+   * 유물의 패시브 효과는 이 시점에 즉시 반영된다.
+   */
+  chooseReward(itemId: string): void {
     if (this.state.phase !== 'REWARD') return;
-    const picked = this.state.rewardChoices.find((c) => c.id === cardId);
+    const picked = this.state.rewardChoices.find((c) => c.id === itemId);
     if (!picked) return; // 알 수 없는 id 로 웨이브만 넘어가 버리는 것을 막는다
 
-    this.deck = [...this.deck, makeCard(picked.ballType, picked.name, picked.description)];
-    this.patchState({ wave: this.state.wave + 1, rewardChoices: [] });
-    this.startWave();
+    if (picked.type === 'BALL') {
+      this.deck = [...this.deck, makeCard(picked.ball)];
+    } else {
+      this.addRelic(picked.relic);
+    }
+    this.advanceWave();
+  }
+
+  /** 보상을 받지 않고 다음 웨이브로 넘어간다 (원치 않는 카드를 억지로 넣지 않도록). */
+  skipReward(): void {
+    if (this.state.phase !== 'REWARD') return;
+    this.advanceWave();
+  }
+
+  /**
+   * 개발용: 남은 벽돌을 정상 피해 경로로 모두 파괴해 웨이브 클리어 흐름을 재현한다.
+   * 자동화 검증에서 "필드를 전부 비우는" 상황을 결정적으로 만들기 위한 것으로,
+   * DEV 빌드의 window.__deckout 을 통해서만 닿는다.
+   */
+  debugClearBricks(): void {
+    if (this.state.phase !== 'AIMING' && this.state.phase !== 'PLAYING') return;
+    const comboBefore = this.combo;
+    for (const brick of [...this.bricks]) {
+      this.damageBrick(brick, brick.hp, brick.center.x, brick.center.y);
+    }
+    this.resolveBlasts();
+    this.notifyComboGain(comboBefore);
+    if (this.flushBrickChanges()) this.clearWave();
   }
 
   /** 게임오버/승리 후 재시작 (R 키) */
@@ -369,6 +413,12 @@ export class GameEngine {
   private reset(): void {
     this.deck = STARTING_DECK();
     this.drawPile = [];
+    this.discardPile = [];
+    this.cardInPlay = null;
+    this.relics = [];
+    this.relicCharges.clear();
+    this.modifiers = resolveModifiers([]);
+    this.paddle.width = BASE_PADDLE_WIDTH;
     this.balls = [];
     this.bricks = [];
     this.brickRects = [];
@@ -383,6 +433,7 @@ export class GameEngine {
     this.shake.reset();
     this.hitStop = 0;
     this.stopDelay = 0;
+    this.netFlash = 0;
     this.combo = 0;
     this.pendingBlasts.length = 0;
     this.scoreBuffer = 0;
@@ -395,28 +446,57 @@ export class GameEngine {
   /* 웨이브 / 턴 흐름                                                    */
   /* ---------------------------------------------------------------- */
 
+  private advanceWave(): void {
+    this.patchState({ wave: this.state.wave + 1, rewardChoices: [] });
+    this.startWave();
+  }
+
   private startWave(): void {
-    this.buildBricks(this.state.wave);
-    this.refillDrawPile();
-    this.patchState({ bricksRemaining: this.bricks.length, deck: this.deck });
+    const wave = this.state.wave;
+    let pattern = patternForWave(wave);
+    this.buildBricks(wave, pattern);
+    // 아주 작은 그리드(예: 2x2)에서는 다이아몬드 같은 패턴이 한 칸도 못 채울 수 있다.
+    // 벽돌 0개로 시작한 웨이브는 "마지막 벽돌 파괴" 순간이 오지 않아 영원히 끝나지 않으므로
+    // 기본 진형으로 되돌린다.
+    if (this.bricks.length === 0) {
+      pattern = FULL;
+      this.buildBricks(wave, pattern);
+    }
+
+    // 덱 순환은 웨이브 단위: 영구 덱을 섞어 새 드로우 더미를 만들고, 버린 더미와
+    // 웨이브 도중 생성된 임시 카드는 여기서 사라진다.
+    this.drawPile = shuffled(this.deck);
+    this.discardPile = [];
+    this.cardInPlay = null;
+
+    // 안전망 같은 웨이브당 1회성 효과를 다시 충전한다.
+    this.rechargeRelics();
+
+    this.patchState({
+      wavePattern: pattern.name,
+      bricksRemaining: this.bricks.length,
+      deck: this.deck,
+      discardPileCount: 0,
+    });
     this.beginTurn();
   }
 
   /**
-   * 상단에 벽돌 그리드를 배치한다.
-   * 벽돌 폭은 필드 폭에서 좌우 여백과 간격을 뺀 나머지를 열 수로 나눠 산출하므로,
-   * cols/gap/sideMargin 을 바꾸면 자동으로 다시 맞춰진다.
+   * 웨이브의 패턴과 HP 스케일에 맞춰 상단에 벽돌을 배치한다.
+   * 칸의 유무는 WavePatterns, 폭/여백 계산은 spawnRow 가 맡는다.
    */
-  private buildBricks(wave: number): void {
-    const { rows } = this.grid;
-    const waveBonus = Math.floor((wave - 1) / 2);
+  private buildBricks(wave: number, pattern: WavePattern): void {
+    const { rows, cols } = this.grid;
     this.bricks = [];
 
     for (let row = 0; row < rows; row++) {
-      const baseHp = ROW_HP[Math.min(row, ROW_HP.length - 1)];
-      const hp = baseHp + (baseHp > 1 ? waveBonus : 0);
       const y = this.grid.top + row * rowPitch(this.grid);
-      for (const brick of this.spawnRow(y, () => this.rollCell(hp, 0))) this.bricks.push(brick);
+      const cells = this.spawnRow(y, (col) => {
+        if (!pattern.has(row, col, rows, cols)) return { hp: 0 };
+        const hp = waveCellHp(wave, row) + (pattern.hpBonus?.(row, col, rows, cols) ?? 0);
+        return this.rollCell(hp, 0);
+      });
+      for (const brick of cells) this.bricks.push(brick);
     }
     this.syncBrickRects();
   }
@@ -472,20 +552,25 @@ export class GameEngine {
     this.brickRects = this.bricks.map((b) => b.rect);
   }
 
-  private refillDrawPile(): void {
-    // Fisher-Yates 셔플
-    const pile = [...this.deck];
-    for (let i = pile.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [pile[i], pile[j]] = [pile[j], pile[i]];
+  /**
+   * 드로우 더미에서 한 장 뽑는다. 비어 있으면 버린 더미를 섞어 새 드로우 더미로 만든다
+   * (덱빌딩 게임의 표준 순환). 웨이브 도중 생성된 임시 카드도 이때 섞여 들어온다.
+   */
+  private takeCard(): DeckCard | null {
+    if (this.drawPile.length === 0) {
+      this.drawPile = shuffled(this.discardPile);
+      this.discardPile = [];
     }
-    this.drawPile = pile;
+    // 두 더미가 모두 비는 것은 덱이 0장일 때뿐이다. 영구 덱으로 복구를 시도한다.
+    if (this.drawPile.length === 0) this.drawPile = shuffled(this.deck);
+    return this.drawPile.pop() ?? null;
   }
 
-  /** 드로우 더미가 비면 덱을 다시 섞는다 (덱빌딩 게임의 표준 처리). */
-  private takeCard(): DeckCard | null {
-    if (this.drawPile.length === 0) this.refillDrawPile();
-    return this.drawPile.pop() ?? null;
+  /** 필드에 나가 있던 카드를 버린 더미로 보낸다. */
+  private discardCardInPlay(): void {
+    if (!this.cardInPlay) return;
+    this.discardPile.push(this.cardInPlay);
+    this.cardInPlay = null;
   }
 
   /** 카드를 뽑아 공을 패들 위에 올리고 발사 대기(AIMING)로 들어간다. */
@@ -497,7 +582,11 @@ export class GameEngine {
       return;
     }
 
+    this.cardInPlay = card;
     const ball = new Ball(this.paddle.x, this.paddle.y, card.ballType);
+    // 유물의 상시 보정치는 공이 만들어질 때 반영된다.
+    ball.baseSpeed *= this.modifiers.ballSpeedMul;
+    ball.damage += this.modifiers.ballDamageAdd;
     ball.attachTo(this.paddle.x, this.paddle.y);
     this.balls = [ball];
     this.aimAngle = -Math.PI / 2;
@@ -509,6 +598,7 @@ export class GameEngine {
       currentCard: card,
       combo: 0, // 웨이브 클리어로 턴이 끝난 경로에서도 확실히 초기화된다
       drawPileCount: this.drawPile.length,
+      discardPileCount: this.discardPile.length,
       turn: { ...this.state.turn, canLaunch: true },
       turnsUntilDeadline: this.computeTurnsUntilDeadline(),
     });
@@ -517,7 +607,9 @@ export class GameEngine {
 
   /** 공이 바닥을 완전히 벗어났을 때 호출된다. */
   private onBallLost(): void {
-    this.patchState({ combo: 0 });
+    this.discardCardInPlay();
+    this.forEachRelic((relic) => relic.onTurnEnd?.(this.relicCtx));
+    this.patchState({ combo: 0, discardPileCount: this.discardPile.length });
     this.hooks.onBallLost?.(this.state.turn.currentTurn);
     this.beginTurnResolution();
   }
@@ -605,49 +697,157 @@ export class GameEngine {
     this.hooks.onGameOver?.(this.state.turn.currentTurn, this.state.score);
   }
 
-  /** 필드의 벽돌을 모두 비웠을 때 */
+  /**
+   * 필드의 활성 벽돌을 모두 비웠을 때.
+   * 물리를 멈추고(REWARD 에서는 step 이 아무것도 하지 않는다) 공을 패들 중앙에 고정한 뒤,
+   * 보상 3장을 추첨해 상태와 onWaveClear 훅으로 내보낸다.
+   */
   private clearWave(): void {
-    this.balls = [];
-    this.hooks.onWaveClear?.(this.state.wave, this.drawPile.length);
+    const ball = this.balls[0];
+    if (ball) {
+      ball.attachTo(this.paddle.x, this.paddle.y);
+      this.balls = [ball];
+    }
+    this.discardCardInPlay();
+    this.forEachRelic((relic) => relic.onTurnEnd?.(this.relicCtx));
+
+    const wave = this.state.wave;
     const bonus = 500 + this.drawPile.length * 120; // 카드를 아낄수록 보너스
 
-    if (this.state.wave >= VICTORY_WAVE) {
+    if (wave >= VICTORY_WAVE) {
       this.patchState({
         phase: 'VICTORY',
         currentCard: null,
         score: this.state.score + bonus,
         bricksRemaining: 0,
         turnsUntilDeadline: -1,
+        discardPileCount: this.discardPile.length,
         turn: { ...this.state.turn, canLaunch: false },
       });
       this.stopDelay = TERMINAL_SETTLE_SECONDS;
+      this.hooks.onWaveClear?.([], wave);
       this.hooks.onVictory?.(this.state.turn.currentTurn, this.state.score);
       return;
     }
 
+    const rewards = rollRewards(new Set(this.relics.map((r) => r.id)), wave);
     this.patchState({
       phase: 'REWARD',
       currentCard: null,
-      rewardChoices: this.rollRewards(),
+      rewardChoices: rewards,
       score: this.state.score + bonus,
       bricksRemaining: 0,
       turnsUntilDeadline: -1,
+      discardPileCount: this.discardPile.length,
       turn: { ...this.state.turn, canLaunch: false },
+    });
+    this.hooks.onWaveClear?.(rewards, wave);
+  }
+
+  /* ---------------------------------------------------------------- */
+  /* 유물                                                               */
+  /* ---------------------------------------------------------------- */
+
+  private createRelicContext(): RelicContext {
+    // 화살표 함수로 this 를 고정하고, 값은 getter 로 매번 최신 상태를 읽게 한다.
+    // eslint 없이도 의도가 보이도록 self 별칭 대신 클로저를 쓴다.
+    const getState = () => this.state;
+    const getCombo = () => this.combo;
+    return {
+      get wave() {
+        return getState().wave;
+      },
+      get turn() {
+        return getState().turn.currentTurn;
+      },
+      get combo() {
+        return getCombo();
+      },
+      consumeCharge: (relicId) => {
+        const left = this.relicCharges.get(relicId) ?? 0;
+        if (left <= 0) return false;
+        this.relicCharges.set(relicId, left - 1);
+        this.syncRelicState();
+        return true;
+      },
+      addCardToDiscard: (ball, temporary = false) => {
+        this.discardPile.push(makeCard(ball, temporary));
+        this.patchState({ discardPileCount: this.discardPile.length });
+      },
+      announce: (text) => {
+        this.floating.spawnNotice(this.paddle.x, this.paddle.y - 56, text);
+      },
+    };
+  }
+
+  private forEachRelic(fn: (relic: Relic) => void): void {
+    for (const relic of this.relics) fn(relic);
+  }
+
+  /** 유물을 보유 목록에 넣고 패시브 효과를 즉시 반영한다. 중복 획득은 무시. */
+  private addRelic(relic: Relic): void {
+    if (this.relics.some((r) => r.id === relic.id)) return;
+    this.relics = [...this.relics, relic];
+    if (relic.chargesPerWave) this.relicCharges.set(relic.id, relic.chargesPerWave);
+    this.applyModifiers();
+    this.syncRelicState();
+  }
+
+  /** 상시 보정치를 다시 계산해 패들 등에 반영한다. 볼 보정은 다음 공 생성 시 적용된다. */
+  private applyModifiers(): void {
+    this.modifiers = resolveModifiers(this.relics);
+    this.paddle.width = BASE_PADDLE_WIDTH * this.modifiers.paddleWidthMul;
+    // 넓어진 패들이 벽 밖으로 삐져나가지 않게 위치를 다시 가둔다.
+    const half = this.paddle.width / 2;
+    this.paddle.x = clamp(this.paddle.x, FIELD.x + half, FIELD.x + FIELD.w - half);
+  }
+
+  /** 웨이브당 1회성 효과를 다시 채운다. */
+  private rechargeRelics(): void {
+    for (const relic of this.relics) {
+      if (relic.chargesPerWave) this.relicCharges.set(relic.id, relic.chargesPerWave);
+    }
+    this.syncRelicState();
+  }
+
+  private syncRelicState(): void {
+    this.patchState({
+      relics: this.relics,
+      relicCharges: Object.fromEntries(this.relicCharges),
     });
   }
 
-  private rollRewards(): RewardCard[] {
-    const pool = [...REWARD_POOL];
-    const picks: RewardCard[] = [];
-    const count = Math.min(3, pool.length);
-    for (let i = 0; i < count; i++) {
-      const [entry] = pool.splice(Math.floor(Math.random() * pool.length), 1);
-      picks.push({
-        ...entry,
-        id: `reward-${this.state.wave}-${i}-${Math.random().toString(36).slice(2, 7)}`,
-      });
-    }
-    return picks;
+  /** 바닥에 닿은 공을 살려낼 유물이 있는가 (렌더에서 안전망을 그릴지 판단) */
+  private hasFallGuard(): boolean {
+    return this.relics.some(
+      (r) => r.onBallFall && (!r.chargesPerWave || (this.relicCharges.get(r.id) ?? 0) > 0),
+    );
+  }
+
+  /** 바닥에 닿은 공을 유물로 구해낸다. 구했으면 true. */
+  private tryRescueBall(ball: Ball): boolean {
+    const rescued = this.relics.some((relic) => relic.onBallFall?.(this.relicCtx) === true);
+    if (!rescued) return false;
+
+    // 되튕긴 공은 올라가는 길에 패들을 "통과"한다 (collidePaddle 은 상승 중인 공을 무시).
+    // 의도된 동작이다 — 패들 아랫면에 막히면 공이 다시 바닥으로 떨어져, 패들이 공 위에
+    // 있을 때마다 안전망이 무용지물이 된다. 패들을 아래에서만 뚫리는 단방향 발판으로 본다.
+    ball.y = FIELD.y + FIELD.h - ball.radius - 1;
+    ball.setVelocity(
+      ensureMinVerticalSpeed(withSpeed({ x: ball.vx, y: -Math.abs(ball.vy) }, ball.baseSpeed)),
+    );
+    ball.fallChecked = false; // 다음 낙하 때 다시 물어볼 수 있게
+    this.netFlash = NET_FLASH_SECONDS;
+    this.particles.emit(ball.x, FIELD.y + FIELD.h - 2, 26, '#7ef0ff', {
+      speed: 300,
+      spread: Math.PI,
+      direction: -Math.PI / 2,
+      life: 0.5,
+      gravity: 120,
+      drag: 2,
+    });
+    this.shake.shake(...SHAKE_PADDLE);
+    return true;
   }
 
   /* ---------------------------------------------------------------- */
@@ -696,7 +896,20 @@ export class GameEngine {
     this.floating.update(delta);
     this.shake.update(delta);
     for (const brick of this.bricks) brick.update(delta);
-    for (const ball of this.balls) ball.recordHistory();
+    for (const ball of this.balls) {
+      ball.recordHistory();
+      // 화염 도선: 날아가는 공 뒤로 불씨를 흘린다.
+      if (this.modifiers.emberTrail && ball.launched) {
+        this.particles.emit(ball.x, ball.y, 1, '#ff8a3d', {
+          speed: 46,
+          life: 0.38,
+          size: 2.2,
+          gravity: -70,
+          drag: 2.4,
+        });
+      }
+    }
+    if (this.netFlash > 0) this.netFlash = Math.max(0, this.netFlash - delta);
 
     this.render();
   };
@@ -732,6 +945,12 @@ export class GameEngine {
       this.collidePaddle(ball);
       this.collideBricks(ball);
 
+      // 바닥에 닿는 순간 유물에게 한 번 기회를 준다 (비상 안전망).
+      if (ball.vy > 0 && !ball.fallChecked && ball.y + ball.radius >= FIELD.y + FIELD.h) {
+        ball.fallChecked = true;
+        if (this.tryRescueBall(ball)) continue;
+      }
+
       // 공이 바닥을 "완전히" 벗어나면 낙하 처리.
       if (ball.isBelow(FIELD.y + FIELD.h)) {
         ball.alive = false;
@@ -741,7 +960,9 @@ export class GameEngine {
     }
 
     // 스톨 워치독: 어떤 이유로든 턴이 끝나지 않으면 강제로 정산한다.
-    if (phase === 'PLAYING') {
+    // 진입 때 잡아 둔 phase 가 아니라 최신 값을 본다 — 이번 스텝에서 웨이브가 클리어됐다면
+    // 보상 화면에 고정해 둔 공을 워치독이 죽여 버릴 수 있다.
+    if (this.state.phase === 'PLAYING') {
       this.playElapsed += dt;
       if (this.playElapsed > MAX_TURN_SECONDS) {
         for (const ball of this.balls) ball.alive = false;
@@ -780,6 +1001,7 @@ export class GameEngine {
       const reflected = paddleReflect(ball.x, rect, ball.baseSpeed);
       // 패들을 움직이며 맞히면 약간의 스핀이 실린다.
       reflected.x += this.paddle.velocity * 0.12;
+      this.forEachRelic((relic) => relic.onPaddleHit?.(this.relicCtx));
       // 최소 수평 성분을 보장해 "패들 정중앙 ↔ 벽돌" 수직 무한 랠리를 방지한다.
       ball.setVelocity(
         ensureMinVerticalSpeed(
@@ -844,6 +1066,7 @@ export class GameEngine {
 
     this.resolveBlasts();
     this.popCombo(comboBefore, anchor.x, anchor.y);
+    this.notifyComboGain(comboBefore);
     const cleared = this.flushBrickChanges();
 
     // 마지막 벽돌이었다면 공이 떨어질 때까지 기다리지 않고 즉시 웨이브를 끝낸다.
@@ -892,7 +1115,9 @@ export class GameEngine {
       this.particles.debris(center.x, center.y, brick.tier.edge);
       this.shake.shake(...SHAKE_BRICK_DESTROY);
       this.requestHitStop(HITSTOP_BRICK_DESTROY);
-      this.hooks.onBrickDestroyed?.(brick.toModel());
+      const model = brick.toModel();
+      this.hooks.onBrickDestroyed?.(model);
+      this.forEachRelic((relic) => relic.onBrickDestroy?.(this.relicCtx, model));
 
       // 폭탄 벽돌은 파괴되면서 주변을 휩쓴다 (연쇄 가능).
       if (brick.isBomb) {
@@ -966,6 +1191,13 @@ export class GameEngine {
     this.floating.spawnCombo(x, y - 40, this.combo);
   }
 
+  /** 콤보가 올랐으면 유물에게 알린다. 벽돌에 피해를 주는 모든 경로가 끝에 이걸 불러야 한다. */
+  private notifyComboGain(before: number): void {
+    if (this.combo <= before) return;
+    const after = this.combo;
+    this.forEachRelic((relic) => relic.onCombo?.(this.relicCtx, before, after));
+  }
+
   private requestHitStop(seconds: number): void {
     this.hitStop = Math.max(this.hitStop, seconds);
   }
@@ -993,6 +1225,7 @@ export class GameEngine {
 
     this.drawBackground(ctx);
     this.drawDeadline(ctx);
+    this.drawSafetyNet(ctx);
     for (const brick of this.bricks) brick.draw(ctx);
     this.paddle.draw(ctx);
     for (const ball of this.balls) ball.draw(ctx);
@@ -1046,6 +1279,31 @@ export class GameEngine {
     ctx.textAlign = 'left';
     ctx.textBaseline = 'bottom';
     ctx.fillText('DEADLINE', 10, DEADLINE_Y - 5);
+    ctx.restore();
+  }
+
+  /** 낙하 방지 유물이 충전돼 있으면 바닥에 그물을 친다. 발동 직후에는 번쩍인다. */
+  private drawSafetyNet(ctx: CanvasRenderingContext2D): void {
+    const armed = this.hasFallGuard();
+    if (!armed && this.netFlash <= 0) return;
+
+    const flash = this.netFlash / NET_FLASH_SECONDS; // 1 → 0
+    const y = GAME_HEIGHT - 5;
+    const alpha = armed ? 0.55 + 0.25 * Math.sin(performance.now() / 260) : 0;
+
+    ctx.save();
+    ctx.strokeStyle = `rgba(126, 240, 255, ${Math.max(alpha, flash)})`;
+    ctx.shadowColor = 'rgba(126, 240, 255, 0.9)';
+    ctx.shadowBlur = 8 + 22 * flash;
+    ctx.lineWidth = 2 + 3 * flash;
+    ctx.beginPath();
+    // 지그재그 그물
+    for (let x = 0; x <= GAME_WIDTH; x += 18) {
+      const yy = y + ((x / 18) % 2 === 0 ? -4 : 4);
+      if (x === 0) ctx.moveTo(x, yy);
+      else ctx.lineTo(x, yy);
+    }
+    ctx.stroke();
     ctx.restore();
   }
 

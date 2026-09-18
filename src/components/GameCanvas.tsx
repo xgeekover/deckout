@@ -39,6 +39,10 @@ export function GameCanvas({ onEngineReady, onStateChange }: GameCanvasProps) {
     const unsubscribe = engine.subscribe((s) => stateRef.current(s));
     readyRef.current(engine);
 
+    // 개발 빌드에서만 콘솔/자동화 검증용 핸들을 연다. 프로덕션 번들에는 포함되지 않는다.
+    const devWindow = window as unknown as { __deckout?: GameEngine };
+    if (import.meta.env.DEV) devWindow.__deckout = engine;
+
     const applySize = () => {
       const cssWidth = wrapper.clientWidth;
       if (cssWidth <= 0) return;
@@ -79,7 +83,9 @@ export function GameCanvas({ onEngineReady, onStateChange }: GameCanvasProps) {
         return;
       }
       if (e.key === 'r' || e.key === 'R') {
-        engine.restart();
+        // R 은 A/D 이동 키 바로 옆이라 플레이 중 오타 한 번으로 판이 날아갈 수 있다.
+        // 안내가 뜨는 종료 화면에서만 받고, 그 외의 재시작은 HUD 의 "새 게임" 버튼으로 한다.
+        if (engine.phase === 'GAME_OVER' || engine.phase === 'VICTORY') engine.restart();
         return;
       }
       if (!MOVE_KEYS_LEFT.has(e.key) && !MOVE_KEYS_RIGHT.has(e.key)) return;
@@ -115,6 +121,7 @@ export function GameCanvas({ onEngineReady, onStateChange }: GameCanvasProps) {
       window.removeEventListener('blur', onBlur);
       observer.disconnect();
       unsubscribe();
+      if (import.meta.env.DEV && devWindow.__deckout === engine) delete devWindow.__deckout;
       engine.destroy();
       readyRef.current(null);
     };
