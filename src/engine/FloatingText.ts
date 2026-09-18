@@ -14,6 +14,11 @@ const EASE_BACK_C3 = EASE_BACK_C1 + 1;
 const easeOutBack = (t: number): number =>
   1 + EASE_BACK_C3 * Math.pow(t - 1, 3) + EASE_BACK_C1 * Math.pow(t - 1, 2);
 
+/** 글자와 필드 가장자리 사이에 남기는 여백(px) */
+const EDGE_MARGIN = 6;
+
+const clampTo = (v: number, min: number, max: number): number => (v < min ? min : v > max ? max : v);
+
 export class FloatingText {
   x: number;
   y: number;
@@ -61,7 +66,11 @@ export class FloatingText {
     this.vy *= damping;
   }
 
-  draw(ctx: CanvasRenderingContext2D): void {
+  /**
+   * fieldWidth 를 주면 글자가 필드 좌우 밖으로 잘려 나가지 않게 x 를 가둔다.
+   * 벽 바로 옆 벽돌에서 뜬 "21 COMBO!" 가 "21 COM" 까지만 보이던 문제를 막는다.
+   */
+  draw(ctx: CanvasRenderingContext2D, fieldWidth = Infinity): void {
     const age = this.maxLife - this.life;
     const remain = this.life / this.maxLife;
 
@@ -74,11 +83,17 @@ export class FloatingText {
 
     ctx.save();
     ctx.globalAlpha = alpha;
-    ctx.translate(this.x, this.y);
-    ctx.scale(pop, pop);
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.font = `${this.kind === 'damage' ? 700 : 800} ${this.size}px ui-sans-serif, system-ui, sans-serif`;
+
+    // 실제 그려질 폭(팝 스케일 포함)의 절반만큼 양쪽 벽에서 떨어뜨린다.
+    const halfWidth = (ctx.measureText(this.text).width * pop) / 2 + EDGE_MARGIN;
+    const x = halfWidth * 2 >= fieldWidth ? fieldWidth / 2 : clampTo(this.x, halfWidth, fieldWidth - halfWidth);
+    const y = Math.max(this.y, (this.size * pop) / 2 + EDGE_MARGIN);
+
+    ctx.translate(x, y);
+    ctx.scale(pop, pop);
 
     ctx.lineWidth = 4;
     ctx.strokeStyle = 'rgba(5, 8, 16, 0.85)';
@@ -100,6 +115,11 @@ const MAX_ITEMS = 140;
 
 export class FloatingTextSystem {
   private items: FloatingText[] = [];
+  private fieldWidth: number;
+
+  constructor(fieldWidth = Infinity) {
+    this.fieldWidth = fieldWidth;
+  }
 
   /** 상한을 넘으면 가장 오래된 것부터 버린다. */
   private push(item: FloatingText): void {
@@ -148,7 +168,7 @@ export class FloatingTextSystem {
   }
 
   draw(ctx: CanvasRenderingContext2D): void {
-    for (const item of this.items) item.draw(ctx);
+    for (const item of this.items) item.draw(ctx, this.fieldWidth);
   }
 
   clear(): void {

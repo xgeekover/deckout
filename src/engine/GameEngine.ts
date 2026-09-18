@@ -187,7 +187,7 @@ export class GameEngine {
   /** this.bricks 와 인덱스가 1:1 인 충돌용 rect 캐시 (서브스텝마다 재생성하지 않기 위함) */
   private brickRects: Rect[] = [];
   private particles = new ParticleSystem();
-  private floating = new FloatingTextSystem();
+  private floating = new FloatingTextSystem(GAME_WIDTH);
   private shake = new ScreenShake();
   /** 남은 히트스탑 시간(초). 0보다 크면 물리/파티클이 멈춘다. */
   private hitStop = 0;
