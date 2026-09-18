@@ -1,0 +1,29 @@
+@import "tailwindcss";
+
+@theme {
+  --color-deck-bg: #070a14;
+  --color-deck-panel: #101725;
+  --color-deck-edge: #1e2a42;
+  --color-deck-accent: #4cc9f0;
+  --color-deck-gold: #f7b538;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background-color: var(--color-deck-bg);
+  color: #e7ecf5;
+  font-family: "Pretendard", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior: none;
+}
+
+canvas {
+  display: block;
+  touch-action: none;
+}
