@@ -10,6 +10,7 @@
  */
 
 import { BALANCE } from '../config/balance.ts';
+import { EN } from '../i18n/strings.ts';
 import { BALL_CARD_DATA } from '../types/game.ts';
 import type { Relic, RelicModifiers } from '../types/game.ts';
 
@@ -18,8 +19,7 @@ export const SCRAP_CYCLE_COMBO = BALANCE.relics.scrapCycleCombo;
 
 export const RELIC_WIDE_PADDLE: Relic = {
   id: 'wide-paddle',
-  name: '광폭 패들',
-  description: `패들 너비가 ${Math.round((BALANCE.relics.widePaddleWidthMul - 1) * 100)}% 넓어진다.`,
+  ...EN.relics['wide-paddle'],
   icon: '🏓',
   rarity: 'COMMON',
   modifiers: { paddleWidthMul: BALANCE.relics.widePaddleWidthMul },
@@ -27,8 +27,7 @@ export const RELIC_WIDE_PADDLE: Relic = {
 
 export const RELIC_FLAME_TRAIL: Relic = {
   id: 'flame-trail',
-  name: '화염 도선',
-  description: `모든 볼의 이동 속도 +${Math.round((BALANCE.relics.flameTrailSpeedMul - 1) * 100)}%, 기본 대미지 +${BALANCE.relics.flameTrailDamageAdd}.`,
+  ...EN.relics['flame-trail'],
   icon: '🔥',
   rarity: 'RARE',
   modifiers: {
@@ -40,8 +39,7 @@ export const RELIC_FLAME_TRAIL: Relic = {
 
 export const RELIC_SAFETY_NET: Relic = {
   id: 'safety-net',
-  name: '비상 안전망',
-  description: '웨이브당 1회, 바닥으로 떨어지는 공을 받아 위로 튕겨낸다.',
+  ...EN.relics['safety-net'],
   icon: '🕸️',
   rarity: 'RARE',
   chargesPerWave: BALANCE.relics.safetyNetChargesPerWave,
@@ -54,8 +52,7 @@ export const RELIC_SAFETY_NET: Relic = {
 
 export const RELIC_SCRAP_CYCLE: Relic = {
   id: 'scrap-cycle',
-  name: '재활용 루틴',
-  description: `한 턴에 콤보 ${SCRAP_CYCLE_COMBO}를 달성하면 버린 카드 더미에 폭탄 구체 1장을 만든다. (웨이브 종료 시 소멸)`,
+  ...EN.relics['scrap-cycle'],
   icon: '♻️',
   rarity: 'LEGENDARY',
   onCombo(ctx, before, after) {
@@ -63,7 +60,7 @@ export const RELIC_SCRAP_CYCLE: Relic = {
     // 콤보는 턴이 끝날 때만 0이 되므로 자연히 턴당 1회로 제한된다.
     if (before >= SCRAP_CYCLE_COMBO || after < SCRAP_CYCLE_COMBO) return;
     ctx.addCardToDiscard(BALL_CARD_DATA.bomb, true);
-    ctx.announce('+ 폭탄 구체');
+    ctx.announce('+ BOMB BALL'); // 캔버스 위의 문구는 언어와 무관하게 영어다 (BOOM! · SAFETY NET! 과 같은 결)
   },
 };
 

@@ -1,4 +1,6 @@
 import { useEffect, useRef } from 'react';
+import { relicText } from '../i18n/strings';
+import { useStrings } from '../i18n/useStrings';
 import { BALL_STATS } from '../types/game';
 import type { BallType, DeckCard, RunSummary } from '../types/game';
 import type { RecordUpdate } from '../utils/storage';
@@ -78,6 +80,7 @@ function StatTile({ label, value, highlight }: { label: string; value: string; h
 
 /** 게임 오버 / 승리 결과창. 통계 · 최종 덱 · 유물 · 최고 기록 갱신 여부를 보여준다. */
 export function GameOverModal({ summary, update, onRestart }: GameOverModalProps) {
+  const t = useStrings();
   const restartRef = useRef<HTMLButtonElement>(null);
   // 버튼에 자동 포커스를 주기 때문에, 발사하려던 Space 연타가 결과창을 보기도 전에 재시작시킬 수 있다.
   const isArmed = useActivationGrace(600);
@@ -95,7 +98,7 @@ export function GameOverModal({ summary, update, onRestart }: GameOverModalProps
     <div
       role="dialog"
       aria-modal="true"
-      aria-label={victory ? '승리 결과' : '게임 오버 결과'}
+      aria-label={victory ? t.result.ariaVictory : t.result.ariaGameOver}
       className="modal-in fixed inset-0 z-30 flex items-start justify-center overflow-y-auto overscroll-contain bg-deck-bg/92 backdrop-blur-sm sm:items-center lg:absolute lg:z-10 lg:rounded-2xl lg:bg-deck-bg/85"
     >
       {anyRecord && <Fireworks />}
@@ -120,19 +123,19 @@ export function GameOverModal({ summary, update, onRestart }: GameOverModalProps
         )}
 
         <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <StatTile label="최종 웨이브" value={`Wave ${summary.wave}`} highlight={newWave} />
-          <StatTile label="총 점수" value={summary.score.toLocaleString()} highlight={newScore} />
-          <StatTile label="최장 콤보" value={`${summary.bestCombo}`} />
-          <StatTile label="파괴한 벽돌" value={summary.bricksDestroyed.toLocaleString()} />
+          <StatTile label={t.result.finalWave} value={`Wave ${summary.wave}`} highlight={newWave} />
+          <StatTile label={t.result.totalScore} value={summary.score.toLocaleString()} highlight={newScore} />
+          <StatTile label={t.result.bestCombo} value={`${summary.bestCombo}`} />
+          <StatTile label={t.result.bricksDestroyed} value={summary.bricksDestroyed.toLocaleString()} />
         </div>
 
         {update && (
           <p className="mt-3 text-[11px] text-slate-500">
-            최고 점수 <b className="text-slate-300">{update.records.highScore.toLocaleString()}</b>
+            {t.result.highScore} <b className="text-slate-300">{update.records.highScore.toLocaleString()}</b>
             {newScore && update.previous.highScore > 0 && (
-              <span className="text-slate-600"> (이전 {update.previous.highScore.toLocaleString()})</span>
+              <span className="text-slate-600"> {t.result.previous(update.previous.highScore.toLocaleString())}</span>
             )}{' '}
-            · 최고 웨이브 <b className="text-slate-300">{update.records.maxWave}</b> · 누적 파괴{' '}
+            · {t.result.bestWave} <b className="text-slate-300">{update.records.maxWave}</b> · {t.result.totalBricks}{' '}
             <b className="text-slate-300">{update.records.totalBricksDestroyed.toLocaleString()}</b>
           </p>
         )}
@@ -140,7 +143,7 @@ export function GameOverModal({ summary, update, onRestart }: GameOverModalProps
         <div className="mt-5 grid gap-3 text-left sm:grid-cols-2">
           <section className="rounded-xl border border-deck-edge bg-deck-panel/60 p-3">
             <h3 className="text-[10px] uppercase tracking-wider text-slate-400">
-              최종 덱 · {summary.deck.length}장
+              {t.result.finalDeck(summary.deck.length)}
             </h3>
             <ul className="mt-2 flex flex-wrap gap-1.5">
               {countByType(summary.deck).map(([type, count]) => {
@@ -154,7 +157,7 @@ export function GameOverModal({ summary, update, onRestart }: GameOverModalProps
                       className="size-2.5 rounded-full"
                       style={{ backgroundColor: stats.color, boxShadow: `0 0 8px ${stats.glow}` }}
                     />
-                    {stats.label}
+                    {t.balls[type].name}
                     <span className="font-semibold tabular-nums text-deck-accent">×{count}</span>
                   </li>
                 );
@@ -164,22 +167,25 @@ export function GameOverModal({ summary, update, onRestart }: GameOverModalProps
 
           <section className="rounded-xl border border-deck-edge bg-deck-panel/60 p-3">
             <h3 className="text-[10px] uppercase tracking-wider text-slate-400">
-              유물 · {summary.relics.length}개
+              {t.result.relics(summary.relics.length)}
             </h3>
             {summary.relics.length === 0 ? (
-              <p className="mt-2 text-[11px] text-slate-500">이번 판에서는 유물을 얻지 못했습니다.</p>
+              <p className="mt-2 text-[11px] text-slate-500">{t.result.noRelics}</p>
             ) : (
               <ul className="mt-2 flex flex-wrap gap-1.5">
-                {summary.relics.map((relic) => (
-                  <li
-                    key={relic.id}
-                    title={relic.description}
-                    className="flex items-center gap-1.5 rounded-lg border border-deck-edge bg-deck-bg/60 px-2 py-1 text-[11px] text-slate-200"
-                  >
-                    <span>{relic.icon}</span>
-                    {relic.name}
-                  </li>
-                ))}
+                {summary.relics.map((relic) => {
+                  const text = relicText(t, relic);
+                  return (
+                    <li
+                      key={relic.id}
+                      title={text.description}
+                      className="flex items-center gap-1.5 rounded-lg border border-deck-edge bg-deck-bg/60 px-2 py-1 text-[11px] text-slate-200"
+                    >
+                      <span>{relic.icon}</span>
+                      {text.name}
+                    </li>
+                  );
+                })}
               </ul>
             )}
           </section>
@@ -193,7 +199,7 @@ export function GameOverModal({ summary, update, onRestart }: GameOverModalProps
           }}
           className="mt-6 rounded-xl border border-deck-accent bg-deck-accent/10 px-7 py-2.5 text-sm font-semibold text-deck-accent transition hover:bg-deck-accent hover:text-deck-bg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-deck-accent"
         >
-          다시 도전 <span className="ml-1 text-xs font-normal opacity-70">(Press R or Click)</span>
+          {t.common.retry} <span className="ml-1 text-xs font-normal opacity-70">{t.result.retryHint}</span>
         </button>
       </div>
     </div>

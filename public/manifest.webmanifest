@@ -1,8 +1,8 @@
 {
   "name": "Deckout — Breakout × Deckbuilding Roguelite",
   "short_name": "Deckout",
-  "description": "벽돌깨기 × 덱빌딩 로그라이트. 공 한 발이 카드 한 장이다.",
-  "lang": "ko",
+  "description": "Breakout × deckbuilding roguelite. Every ball you fire is a card in your deck.",
+  "lang": "en",
   "start_url": ".",
   "scope": ".",
   "display": "fullscreen",

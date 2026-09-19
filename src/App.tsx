@@ -9,6 +9,9 @@ import { RewardModal } from './components/RewardModal';
 import { useFullscreen } from './components/useFullscreen';
 import { useMediaQuery } from './components/useMediaQuery';
 import type { GameEngine } from './engine/GameEngine';
+import { STRINGS } from './i18n/strings';
+import type { Language } from './i18n/strings';
+import { StringsContext } from './i18n/useStrings';
 import { GAME_HEIGHT, GAME_WIDTH, createInitialGameState } from './types/game';
 import type { GameState, RunSummary } from './types/game';
 import {
@@ -68,6 +71,17 @@ export default function App() {
   const handleControlModeChange = useCallback((mode: ControlMode) => {
     setSettings((prev) => ({ ...prev, controlMode: mode }));
   }, []);
+
+  const handleLanguageChange = useCallback((language: Language) => {
+    setSettings((prev) => ({ ...prev, language }));
+  }, []);
+
+  // 문서의 lang 속성도 따라가야 스크린 리더가 맞는 발음으로 읽고, 브라우저의 "번역할까요?"가 엉뚱하게 뜨지 않는다.
+  useEffect(() => {
+    document.documentElement.lang = settings.language;
+  }, [settings.language]);
+
+  const t = STRINGS[settings.language];
 
   const handleUserGesture = useCallback(() => sound.unlock(), [sound]);
 
@@ -162,6 +176,7 @@ export default function App() {
       fullscreen={fullscreen}
       onToggleMute={handleToggleMute}
       onControlModeChange={handleControlModeChange}
+      onLanguageChange={handleLanguageChange}
       onRestart={() => {
         handleRestart();
         setInfoOpen(false);
@@ -173,127 +188,133 @@ export default function App() {
   // 모드가 바뀌어도 GameCanvas 가 다시 마운트되면 안 된다 (엔진이 새로 만들어져 진행 중인 판이 사라진다).
   // 그래서 트리 구조는 두 모드가 같고, 형제에는 key 를 줘서 앞에 요약 HUD 가 끼어들어도 자리가 밀리지 않게 한다.
   return (
-    <main
-      className={
-        immersive
-          ? 'fixed inset-0 flex flex-col bg-deck-bg landscape:flex-row'
-          : 'mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-6 p-4 lg:flex-row lg:items-start lg:p-8'
-      }
-      style={
-        immersive
-          ? {
-              // 노치/홈 인디케이터 영역을 피한다 (홈 화면에 추가해 주소창 없이 실행했을 때 특히 필요)
-              paddingTop: 'env(safe-area-inset-top)',
-              paddingRight: 'env(safe-area-inset-right)',
-              paddingBottom: 'env(safe-area-inset-bottom)',
-              paddingLeft: 'env(safe-area-inset-left)',
-            }
-          : undefined
-      }
-    >
-      {immersive && (
-        <CompactHUD
-          key="compact-hud"
-          state={state}
-          isMuted={settings.isMuted}
-          fullscreen={fullscreen}
-          onToggleMute={handleToggleMute}
-          onOpenInfo={() => setInfoOpen(true)}
-        />
-      )}
-
-      <div
-        key="stage"
+    <StringsContext value={t}>
+      <main
         className={
           immersive
-            ? // 크기 컨테이너: 안쪽 상자가 "이 영역에 들어가는 가장 큰 900:640" 이 되도록 cqw/cqh 로 계산한다
-              'flex min-h-0 min-w-0 flex-1 items-start justify-center [container-type:size] landscape:items-center'
-            : 'flex-1'
+            ? 'fixed inset-0 flex flex-col bg-deck-bg landscape:flex-row'
+            : 'mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-6 p-4 lg:flex-row lg:items-start lg:p-8'
+        }
+        style={
+          immersive
+            ? {
+                // 노치/홈 인디케이터 영역을 피한다 (홈 화면에 추가해 주소창 없이 실행했을 때 특히 필요)
+                paddingTop: 'env(safe-area-inset-top)',
+                paddingRight: 'env(safe-area-inset-right)',
+                paddingBottom: 'env(safe-area-inset-bottom)',
+                paddingLeft: 'env(safe-area-inset-left)',
+              }
+            : undefined
         }
       >
+        {immersive && (
+          <CompactHUD
+            key="compact-hud"
+            state={state}
+            isMuted={settings.isMuted}
+            fullscreen={fullscreen}
+            onToggleMute={handleToggleMute}
+            onOpenInfo={() => setInfoOpen(true)}
+          />
+        )}
+
         <div
-          className="relative"
-          style={
+          key="stage"
+          className={
             immersive
-              ? { width: `min(100cqw, calc(100cqh * ${GAME_WIDTH} / ${GAME_HEIGHT}))` }
-              : undefined
+              ? // 크기 컨테이너: 안쪽 상자가 "이 영역에 들어가는 가장 큰 900:640" 이 되도록 cqw/cqh 로 계산한다
+                'flex min-h-0 min-w-0 flex-1 items-start justify-center [container-type:size] landscape:items-center'
+              : 'flex-1'
           }
         >
-          <GameCanvas
-            onEngineReady={handleEngineReady}
-            onStateChange={setState}
-            controlMode={settings.controlMode}
-            onToggleMute={handleToggleMute}
-            onUserGesture={handleUserGesture}
-          />
-
-          {state.phase === 'REWARD' && (
-            <RewardModal
-              wave={state.wave}
-              choices={state.rewardChoices}
-              deck={state.deck}
-              relics={state.relics}
-              onChoose={handleChooseReward}
-              onSkip={handleSkipReward}
+          <div
+            className="relative"
+            style={
+              immersive
+                ? { width: `min(100cqw, calc(100cqh * ${GAME_WIDTH} / ${GAME_HEIGHT}))` }
+                : undefined
+            }
+          >
+            <GameCanvas
+              onEngineReady={handleEngineReady}
+              onStateChange={setState}
+              controlMode={settings.controlMode}
+              onToggleMute={handleToggleMute}
+              onUserGesture={handleUserGesture}
             />
-          )}
 
-          {isOver && runEnd && (
-            <GameOverModal summary={runEnd.summary} update={runEnd.update} onRestart={handleRestart} />
-          )}
+            {state.phase === 'REWARD' && (
+              <RewardModal
+                wave={state.wave}
+                choices={state.rewardChoices}
+                deck={state.deck}
+                relics={state.relics}
+                onChoose={handleChooseReward}
+                onSkip={handleSkipReward}
+              />
+            )}
 
-          {/* 게임 우선 화면에는 하단 조작 가이드를 둘 자리가 없다. 처음 몇 턴 동안만 빈 플레이 필드 위에 얹어 보여준다. */}
-          {immersive && state.phase === 'AIMING' && state.turn.currentTurn <= 3 && (
-            <div
-              data-testid="overlay-hints"
-              className="pointer-events-none absolute inset-x-0 top-[58%] flex justify-center"
-            >
-              <KeyHints phase={state.phase} isMuted={settings.isMuted} />
-            </div>
-          )}
+            {isOver && runEnd && (
+              <GameOverModal summary={runEnd.summary} update={runEnd.update} onRestart={handleRestart} />
+            )}
 
-          {immersive && (
-            <p className="pointer-events-none absolute inset-x-0 top-full mt-3 px-4 text-center text-[11px] leading-relaxed text-slate-500 landscape:hidden">
-              📱 폰을 <b className="text-slate-300">가로로 돌리면</b> 게임 화면이 2배 넘게 커집니다.
-              {!fullscreen.supported && (
-                <>
-                  <br />
-                  공유 → <b className="text-slate-300">홈 화면에 추가</b>로 실행하면 주소창 없이 전체 화면으로 열립니다.
-                </>
-              )}
-            </p>
-          )}
-        </div>
-
-        {!immersive && <KeyHints phase={state.phase} isMuted={settings.isMuted} />}
-      </div>
-
-      {!immersive && <div key="hud">{hud}</div>}
-
-      {showInfo && (
-        <div
-          key="info-drawer"
-          role="dialog"
-          aria-modal="true"
-          aria-label="게임 정보"
-          className="fixed inset-0 z-40 overflow-y-auto overscroll-contain bg-deck-bg/97 p-4 backdrop-blur-sm"
-        >
-          <div className="mx-auto flex w-full max-w-md flex-col gap-3">
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-slate-400">게임을 일시정지했습니다</span>
-              <button
-                type="button"
-                data-testid="close-info"
-                onClick={() => setInfoOpen(false)}
-                className="rounded-lg border border-deck-accent px-4 py-1.5 text-sm text-deck-accent"
+            {/* 게임 우선 화면에는 하단 조작 가이드를 둘 자리가 없다. 처음 몇 턴 동안만 빈 플레이 필드 위에 얹어 보여준다. */}
+            {immersive && state.phase === 'AIMING' && state.turn.currentTurn <= 3 && (
+              <div
+                data-testid="overlay-hints"
+                className="pointer-events-none absolute inset-x-0 top-[58%] flex justify-center"
               >
-                닫고 계속하기
-              </button>
-            </div>
-            {hud}
+                <KeyHints phase={state.phase} isMuted={settings.isMuted} />
+              </div>
+            )}
+
+            {immersive && (
+              <p className="pointer-events-none absolute inset-x-0 top-full mt-3 px-4 text-center text-[11px] leading-relaxed text-slate-500 landscape:hidden">
+                📱 {t.app.rotateHint[0]}
+                <b className="text-slate-300">{t.app.rotateHint[1]}</b>
+                {t.app.rotateHint[2]}
+                {!fullscreen.supported && (
+                  <>
+                    <br />
+                    {t.app.homeScreenHint[0]}
+                    <b className="text-slate-300">{t.app.homeScreenHint[1]}</b>
+                    {t.app.homeScreenHint[2]}
+                  </>
+                )}
+              </p>
+            )}
           </div>
+
+          {!immersive && <KeyHints phase={state.phase} isMuted={settings.isMuted} />}
         </div>
-      )}
-    </main>
+
+        {!immersive && <div key="hud">{hud}</div>}
+
+        {showInfo && (
+          <div
+            key="info-drawer"
+            role="dialog"
+            aria-modal="true"
+            aria-label={t.app.infoAria}
+            className="fixed inset-0 z-40 overflow-y-auto overscroll-contain bg-deck-bg/97 p-4 backdrop-blur-sm"
+          >
+            <div className="mx-auto flex w-full max-w-md flex-col gap-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-slate-400">{t.app.paused}</span>
+                <button
+                  type="button"
+                  data-testid="close-info"
+                  onClick={() => setInfoOpen(false)}
+                  className="rounded-lg border border-deck-accent px-4 py-1.5 text-sm text-deck-accent"
+                >
+                  {t.app.closeInfo}
+                </button>
+              </div>
+              {hud}
+            </div>
+          </div>
+        )}
+      </main>
+    </StringsContext>
   );
 }

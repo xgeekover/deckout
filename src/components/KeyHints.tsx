@@ -1,3 +1,5 @@
+import type { Strings } from '../i18n/strings';
+import { useStrings } from '../i18n/useStrings';
 import type { GamePhase } from '../types/game';
 import { useIsTouchPrimary } from './useIsTouchPrimary';
 
@@ -12,61 +14,62 @@ interface Hint {
 }
 
 /** 지금 phase 에서 실제로 먹는 키만 보여준다. */
-function keyboardHints(phase: GamePhase, isMuted: boolean): Hint[] {
-  const mute: Hint = { keys: ['M'], label: isMuted ? '소리 켜기' : '음소거' };
+function keyboardHints(t: Strings, phase: GamePhase, isMuted: boolean): Hint[] {
+  const mute: Hint = { keys: ['M'], label: isMuted ? t.common.unmute : t.common.mute };
 
   switch (phase) {
     case 'REWARD':
       return [
-        { keys: ['1', '2', '3'], label: '카드 선택' },
-        { keys: ['0', 'S'], label: '스킵' },
+        { keys: ['1', '2', '3'], label: t.hints.pickCard },
+        { keys: ['0', 'S'], label: t.hints.skip },
         mute,
       ];
     case 'GAME_OVER':
     case 'VICTORY':
-      return [{ keys: ['R'], label: '다시 도전' }, mute];
+      return [{ keys: ['R'], label: t.common.retry }, mute];
     case 'AIMING':
       return [
-        { keys: ['A', 'D'], label: '이동' },
-        { keys: ['←', '→'], label: '이동' },
-        { keys: ['Space', 'Enter'], label: '발사' },
+        { keys: ['A', 'D'], label: t.hints.move },
+        { keys: ['←', '→'], label: t.hints.move },
+        { keys: ['Space', 'Enter'], label: t.hints.launch },
         mute,
       ];
     default:
       return [
-        { keys: ['A', 'D'], label: '이동' },
-        { keys: ['←', '→'], label: '이동' },
+        { keys: ['A', 'D'], label: t.hints.move },
+        { keys: ['←', '→'], label: t.hints.move },
         mute,
       ];
   }
 }
 
 /** 키보드가 없는 기기용. 있지도 않은 키를 안내하는 대신 실제로 되는 제스처를 알려준다. */
-function touchHints(phase: GamePhase): Hint[] {
+function touchHints(t: Strings, phase: GamePhase): Hint[] {
   switch (phase) {
     case 'REWARD':
-      return [{ keys: ['탭'], label: '카드 선택 · 스킵' }];
+      return [{ keys: [t.hints.tap], label: t.hints.pickOrSkip }];
     case 'GAME_OVER':
     case 'VICTORY':
-      return [{ keys: ['탭'], label: '다시 도전' }];
+      return [{ keys: [t.hints.tap], label: t.common.retry }];
     case 'AIMING':
       return [
-        { keys: ['드래그'], label: '패들 이동' },
-        { keys: ['탭'], label: '발사' },
+        { keys: [t.hints.drag], label: t.hints.movePaddle },
+        { keys: [t.hints.tap], label: t.hints.launch },
       ];
     default:
-      return [{ keys: ['드래그'], label: '패들 이동' }];
+      return [{ keys: [t.hints.drag], label: t.hints.movePaddle }];
   }
 }
 
 /** 화면 하단의 은은한 조작 가이드. 기기의 주 입력 장치에 맞춰 키보드 또는 터치 안내를 보여준다. */
 export function KeyHints({ phase, isMuted }: KeyHintsProps) {
+  const t = useStrings();
   const isTouch = useIsTouchPrimary();
-  const hints = isTouch ? touchHints(phase) : keyboardHints(phase, isMuted);
+  const hints = isTouch ? touchHints(t, phase) : keyboardHints(t, phase, isMuted);
 
   return (
     <ul
-      aria-label={isTouch ? '터치 조작 가이드' : '키보드 조작 가이드'}
+      aria-label={isTouch ? t.hints.touchAria : t.hints.keyboardAria}
       data-input={isTouch ? 'touch' : 'keyboard'}
       className="mt-3 flex flex-wrap items-center justify-center gap-x-4 gap-y-1.5 text-[11px] text-slate-500 opacity-70 transition-opacity hover:opacity-100"
     >

@@ -4,6 +4,7 @@
  */
 
 import { BALANCE } from '../config/balance.ts';
+import { EN } from '../i18n/strings.ts';
 
 export interface Vec2 {
   x: number;
@@ -44,35 +45,35 @@ export interface BallStats {
 
 export const BALL_STATS: Record<BallType, BallStats> = {
   normal: {
-    label: '기본 구체',
+    label: EN.balls.normal.name,
     ...BALANCE.ball.stats.normal,
     color: '#eef4ff',
     glow: 'rgba(120, 190, 255, 0.55)',
     trail: '#ffffff',
   },
   heavy: {
-    label: '중량 구체',
+    label: EN.balls.heavy.name,
     ...BALANCE.ball.stats.heavy,
     color: '#ffd98a',
     glow: 'rgba(247, 181, 56, 0.55)',
     trail: '#f7b538',
   },
   pierce: {
-    label: '관통 구체',
+    label: EN.balls.pierce.name,
     ...BALANCE.ball.stats.pierce,
     color: '#8ad8ff',
     glow: 'rgba(56, 189, 248, 0.6)',
     trail: '#38bdf8',
   },
   bomb: {
-    label: '폭탄 구체',
+    label: EN.balls.bomb.name,
     ...BALANCE.ball.stats.bomb,
     color: '#ffb066',
     glow: 'rgba(255, 138, 61, 0.65)',
     trail: '#ff8a3d',
   },
   split: {
-    label: '분열 구체',
+    label: EN.balls.split.name,
     ...BALANCE.ball.stats.split,
     color: '#ff9de2',
     glow: 'rgba(255, 157, 226, 0.55)',
@@ -97,13 +98,16 @@ export interface DeckCard extends BallData {
   temporary?: boolean;
 }
 
-/** 볼 타입별 기본 카드 문구 */
+/**
+ * 볼 타입별 기본 카드 문구 (영어). 화면에 그릴 때는 UI 가 ballType 으로 현재 언어의 문구를 다시 찾는다
+ * — 여기 적힌 것은 사전에 없는 경우의 기본값이다.
+ */
 export const BALL_CARD_DATA: Record<BallType, BallData> = {
-  normal: { ballType: 'normal', name: '기본 구체', description: '평범하지만 믿음직한 한 발.' },
-  heavy: { ballType: 'heavy', name: '중량 구체', description: '느리지만 벽돌을 3 만큼 부순다.' },
-  pierce: { ballType: 'pierce', name: '관통 구체', description: '벽돌을 뚫고 지나간다. 한 줄을 통째로.' },
-  bomb: { ballType: 'bomb', name: '폭탄 구체', description: '부순 자리에서 폭발해 주변까지 쓸어버린다.' },
-  split: { ballType: 'split', name: '분열 구체', description: '첫 벽돌에 맞는 순간 셋으로 갈라진다.' },
+  normal: { ballType: 'normal', ...EN.balls.normal },
+  heavy: { ballType: 'heavy', ...EN.balls.heavy },
+  pierce: { ballType: 'pierce', ...EN.balls.pierce },
+  bomb: { ballType: 'bomb', ...EN.balls.bomb },
+  split: { ballType: 'split', ...EN.balls.split },
 };
 
 export type Rarity = 'COMMON' | 'RARE' | 'LEGENDARY';
@@ -246,7 +250,9 @@ export interface GameState {
   wave: number;
   score: number;
   /** 이번 웨이브의 배치 패턴 이름 */
+  /** 현재 웨이브 패턴의 영어 이름. 화면에는 wavePatternId 로 찾은 현재 언어의 이름을 쓴다. */
   wavePattern: string;
+  wavePatternId: string;
   /** 이번 웨이브에 앞으로 더 들어올 수 있는 새 줄의 수 */
   reinforcementsLeft: number;
   /** 보유 덱 전체 (영구 카드) */
@@ -282,6 +288,7 @@ export const createInitialGameState = (): GameState => ({
   turn: { currentTurn: 1, canLaunch: false },
   wave: 1,
   wavePattern: '',
+  wavePatternId: '',
   reinforcementsLeft: 0,
   score: 0,
   deck: [],

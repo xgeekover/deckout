@@ -248,7 +248,7 @@ export class GameEngine {
 
   constructor(canvas: HTMLCanvasElement) {
     const ctx = canvas.getContext('2d');
-    if (!ctx) throw new Error('2D 컨텍스트를 생성할 수 없습니다.');
+    if (!ctx) throw new Error('Could not create a 2D canvas context.');
     this.canvas = canvas;
     this.ctx = ctx;
     this.paddle = new Paddle(GAME_WIDTH / 2, PADDLE_Y, BASE_PADDLE_WIDTH);
@@ -514,6 +514,7 @@ export class GameEngine {
 
     this.patchState({
       wavePattern: pattern.name,
+      wavePatternId: pattern.id,
       reinforcementsLeft: this.reinforcementsLeft,
       bricksRemaining: this.bricks.length,
       deck: this.deck,

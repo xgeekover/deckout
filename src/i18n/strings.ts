@@ -1,0 +1,515 @@
+/**
+ * 화면에 나가는 모든 문구의 단일 출처. 기본 언어는 영어이고, 한국어는 설정에서 고른다.
+ *
+ * DOM 무의존 순수 모듈이다 — 엔진 쪽 데이터(볼 · 유물 · 웨이브 패턴의 이름)도 여기의 영어 문구를
+ * 가져다 쓰므로 같은 문장이 두 군데에 적히지 않는다. UI 는 id(볼 타입 · 유물 id · 패턴 id)로
+ * 현재 언어의 문구를 다시 찾는다.
+ *
+ * 수치가 들어가는 설명은 balance.ts 의 값으로 만든다. 밸런스를 바꾸면 설명도 따라 바뀐다.
+ */
+
+import { BALANCE } from '../config/balance.ts';
+import type { BallType, GamePhase } from '../types/game.ts';
+
+export type Language = 'en' | 'ko';
+
+export const LANGUAGES: readonly Language[] = ['en', 'ko'];
+export const DEFAULT_LANGUAGE: Language = 'en';
+
+/** 언어 이름은 번역하지 않는다 — 각자의 언어로 적어야 그 언어 사용자가 찾을 수 있다. */
+export const LANGUAGE_NAMES: Record<Language, string> = { en: 'English', ko: '한국어' };
+
+export type RelicId = 'wide-paddle' | 'flame-trail' | 'safety-net' | 'scrap-cycle';
+export type PatternId = 'full' | 'checker' | 'inverted-triangle' | 'shield' | 'diamond' | 'columns';
+
+export interface NameAndDescription {
+  name: string;
+  description: string;
+}
+
+/** 굵은 글씨가 끼는 문장: [앞, 굵게, 뒤] */
+export type EmphasizedSentence = readonly [before: string, strong: string, after: string];
+
+export interface Strings {
+  tagline: string;
+  /** 일반 HUD 의 phase 배지 */
+  phase: Record<GamePhase, string>;
+  /** 요약 HUD 용 짧은 표기 */
+  phaseShort: Record<GamePhase, string>;
+
+  balls: Record<BallType, NameAndDescription>;
+  relics: Record<RelicId, NameAndDescription>;
+  patterns: Record<PatternId, string>;
+
+  common: {
+    score: string;
+    turn: string;
+    combo: string;
+    turns: (n: number) => string;
+    mute: string;
+    unmute: string;
+    enterFullscreen: string;
+    exitFullscreen: string;
+    retry: string;
+  };
+
+  hud: {
+    currentWave: string;
+    reinforcementsLeft: (rows: number) => string;
+    reinforcementsDone: string;
+    discarded: string;
+    bricksLeft: string;
+    currentCard: string;
+    cardsLeft: string;
+    temporary: string;
+    waiting: string;
+    deck: string;
+    records: string;
+    recordWave: string;
+    recordBricks: string;
+    settings: string;
+    sound: string;
+    soundOn: string;
+    soundMuted: string;
+    paddleControl: string;
+    paddleControlAria: string;
+    mouse: string;
+    keyboard: string;
+    keyboardModeNote: string;
+    display: string;
+    language: string;
+    relics: string;
+    relicCount: (n: number) => string;
+    relicsEmpty: string;
+    chargesLeft: (left: number, total: number) => string;
+    comboBest: (n: number) => string;
+    comboUnit: string;
+    untilDeadline: string;
+    deadlineWarning: string;
+    newGame: string;
+    confirmRestart: string;
+  };
+
+  compact: {
+    deadline: string;
+    incoming: string;
+    incomingRows: (rows: number) => string;
+    incomingDone: string;
+    waiting: string;
+    relicsAria: string;
+    openInfo: string;
+  };
+
+  hints: {
+    move: string;
+    launch: string;
+    pickCard: string;
+    skip: string;
+    tap: string;
+    drag: string;
+    movePaddle: string;
+    pickOrSkip: string;
+    keyboardAria: string;
+    touchAria: string;
+  };
+
+  reward: {
+    aria: string;
+    title: string;
+    subtitle: string;
+    skip: string;
+    typeRelic: string;
+    typeBall: string;
+    relicAlwaysOn: string;
+    statPierce: string;
+    statBlast: string;
+    statSplit: (pieces: number) => string;
+    currentDeck: string;
+    relics: string;
+  };
+
+  result: {
+    ariaVictory: string;
+    ariaGameOver: string;
+    finalWave: string;
+    totalScore: string;
+    bestCombo: string;
+    bricksDestroyed: string;
+    highScore: string;
+    previous: (score: string) => string;
+    bestWave: string;
+    totalBricks: string;
+    finalDeck: (cards: number) => string;
+    relics: (n: number) => string;
+    noRelics: string;
+    retryHint: string;
+  };
+
+  app: {
+    rotateHint: EmphasizedSentence;
+    homeScreenHint: EmphasizedSentence;
+    infoAria: string;
+    paused: string;
+    closeInfo: string;
+  };
+}
+
+const percent = (mul: number): number => Math.round((mul - 1) * 100);
+const plural = (n: number, one: string, many = `${one}s`): string => `${n} ${n === 1 ? one : many}`;
+
+const R = BALANCE.relics;
+const HEAVY_DAMAGE = BALANCE.ball.stats.heavy.damage;
+const SPLIT_PIECES = BALANCE.ball.stats.split.splitCount + 1;
+
+const en: Strings = {
+  tagline: 'Breakout × deckbuilding roguelite',
+  phase: {
+    AIMING: 'Ready — click to launch',
+    PLAYING: 'In play',
+    TURN_RESOLVING: 'Resolving turn',
+    REWARD: 'Choose a reward',
+    GAME_OVER: 'Game over',
+    VICTORY: 'Victory',
+  },
+  phaseShort: {
+    AIMING: 'Ready',
+    PLAYING: 'In play',
+    TURN_RESOLVING: 'Resolving',
+    REWARD: 'Reward',
+    GAME_OVER: 'Game over',
+    VICTORY: 'Victory',
+  },
+
+  balls: {
+    normal: { name: 'Basic Ball', description: 'Plain, but dependable.' },
+    heavy: { name: 'Heavy Ball', description: `Slow, but hits bricks for ${HEAVY_DAMAGE}.` },
+    pierce: { name: 'Pierce Ball', description: 'Punches straight through bricks. A whole row at once.' },
+    bomb: { name: 'Bomb Ball', description: 'Explodes wherever it breaks a brick, taking the neighbors with it.' },
+    split: { name: 'Split Ball', description: `Splits into ${SPLIT_PIECES} the moment it hits its first brick.` },
+  },
+  relics: {
+    'wide-paddle': {
+      name: 'Wide Paddle',
+      description: `Your paddle is ${percent(R.widePaddleWidthMul)}% wider.`,
+    },
+    'flame-trail': {
+      name: 'Flame Trail',
+      description: `All balls move ${percent(R.flameTrailSpeedMul)}% faster and deal +${R.flameTrailDamageAdd} base damage.`,
+    },
+    'safety-net': {
+      name: 'Safety Net',
+      description: 'Once per wave, catches a ball falling off the bottom and bounces it back up.',
+    },
+    'scrap-cycle': {
+      name: 'Scrap Cycle',
+      description: `Reach a ${R.scrapCycleCombo}-hit combo in one turn to add a Bomb Ball to your discard pile. (It vanishes when the wave ends.)`,
+    },
+  },
+  patterns: {
+    full: 'Standard',
+    checker: 'Checkerboard',
+    'inverted-triangle': 'Inverted Triangle',
+    shield: 'Shield Wall',
+    diamond: 'Diamond',
+    columns: 'Columns',
+  },
+
+  common: {
+    score: 'Score',
+    turn: 'Turn',
+    combo: 'Combo',
+    turns: (n) => plural(n, 'turn'),
+    mute: 'Mute',
+    unmute: 'Unmute',
+    enterFullscreen: 'Fullscreen',
+    exitFullscreen: 'Exit fullscreen',
+    retry: 'Try again',
+  },
+
+  hud: {
+    currentWave: 'Current wave',
+    reinforcementsLeft: (rows) => `${plural(rows, 'more row')} incoming`,
+    reinforcementsDone: 'No more rows coming',
+    discarded: 'Discarded',
+    bricksLeft: 'Bricks left',
+    currentCard: 'Current card',
+    cardsLeft: 'Cards left',
+    temporary: 'TEMP',
+    waiting: 'Waiting…',
+    deck: 'Your deck',
+    records: 'Best records',
+    recordWave: 'Wave',
+    recordBricks: 'Bricks',
+    settings: 'Settings',
+    sound: 'Sound',
+    soundOn: '🔊 On',
+    soundMuted: '🔇 Muted',
+    paddleControl: 'Paddle control',
+    paddleControlAria: 'Paddle control mode',
+    mouse: 'Mouse',
+    keyboard: 'Keyboard',
+    keyboardModeNote:
+      'The paddle will not follow the mouse. Use A/D or ←/→. Touch dragging always works, whatever this is set to.',
+    display: 'Display',
+    language: 'Language',
+    relics: 'Passive relics',
+    relicCount: (n) => `${n} held`,
+    relicsEmpty: 'Clear a wave to earn one.',
+    chargesLeft: (left, total) => `Uses left this wave: ${left} / ${total}`,
+    comboBest: (n) => `Best ${n}`,
+    comboUnit: 'hits in a row',
+    untilDeadline: 'Until deadline',
+    deadlineWarning: 'If a brick reaches the warning line, you lose on the spot.',
+    newGame: 'New game',
+    confirmRestart: 'This abandons your current run — press again to confirm',
+  },
+
+  compact: {
+    deadline: 'Deadline',
+    incoming: 'Incoming',
+    incomingRows: (rows) => plural(rows, 'row'),
+    incomingDone: 'none',
+    waiting: 'Waiting',
+    relicsAria: 'Relics held',
+    openInfo: 'Details · settings · new game',
+  },
+
+  hints: {
+    move: 'Move',
+    launch: 'Launch',
+    pickCard: 'Pick a card',
+    skip: 'Skip',
+    tap: 'Tap',
+    drag: 'Drag',
+    movePaddle: 'Move paddle',
+    pickOrSkip: 'Pick a card · skip',
+    keyboardAria: 'Keyboard controls',
+    touchAria: 'Touch controls',
+  },
+
+  reward: {
+    aria: 'Wave clear reward',
+    title: 'Choose one reward',
+    subtitle: 'Balls join your deck. Relics take effect right away.',
+    skip: 'Skip — take nothing and go to the next wave',
+    typeRelic: 'Relic',
+    typeBall: 'New ball',
+    relicAlwaysOn: 'Active while held',
+    statPierce: 'Pierce',
+    statBlast: 'Blast',
+    statSplit: (pieces) => `Split ×${pieces}`,
+    currentDeck: 'Deck',
+    relics: 'Relics',
+  },
+
+  result: {
+    ariaVictory: 'Victory results',
+    ariaGameOver: 'Game over results',
+    finalWave: 'Final wave',
+    totalScore: 'Total score',
+    bestCombo: 'Best combo',
+    bricksDestroyed: 'Bricks broken',
+    highScore: 'High score',
+    previous: (score) => `(was ${score})`,
+    bestWave: 'Best wave',
+    totalBricks: 'All-time bricks',
+    finalDeck: (cards) => `Final deck · ${plural(cards, 'card')}`,
+    relics: (n) => `Relics · ${n}`,
+    noRelics: 'No relics this run.',
+    retryHint: '(Press R or click)',
+  },
+
+  app: {
+    rotateHint: ['Turn your phone ', 'sideways', ' and the game gets more than twice as big.'],
+    homeScreenHint: ['Share → ', 'Add to Home Screen', ' opens it fullscreen, without the address bar.'],
+    infoAria: 'Game info',
+    paused: 'Game paused',
+    closeInfo: 'Close and resume',
+  },
+};
+
+const ko: Strings = {
+  tagline: '벽돌깨기 × 덱빌딩 로그라이트',
+  phase: {
+    AIMING: '발사 준비 (클릭하여 발사)',
+    PLAYING: '진행 중',
+    TURN_RESOLVING: '턴 정산 중',
+    REWARD: '보상 선택',
+    GAME_OVER: '게임 오버',
+    VICTORY: '승리',
+  },
+  phaseShort: {
+    AIMING: '발사 준비',
+    PLAYING: '진행 중',
+    TURN_RESOLVING: '턴 정산',
+    REWARD: '보상 선택',
+    GAME_OVER: '게임 오버',
+    VICTORY: '승리',
+  },
+
+  balls: {
+    normal: { name: '기본 구체', description: '평범하지만 믿음직한 한 발.' },
+    heavy: { name: '중량 구체', description: `느리지만 벽돌을 ${HEAVY_DAMAGE} 만큼 부순다.` },
+    pierce: { name: '관통 구체', description: '벽돌을 뚫고 지나간다. 한 줄을 통째로.' },
+    bomb: { name: '폭탄 구체', description: '부순 자리에서 폭발해 주변까지 쓸어버린다.' },
+    split: { name: '분열 구체', description: `첫 벽돌에 맞는 순간 ${SPLIT_PIECES}개로 갈라진다.` },
+  },
+  relics: {
+    'wide-paddle': {
+      name: '광폭 패들',
+      description: `패들 너비가 ${percent(R.widePaddleWidthMul)}% 넓어진다.`,
+    },
+    'flame-trail': {
+      name: '화염 도선',
+      description: `모든 볼의 이동 속도 +${percent(R.flameTrailSpeedMul)}%, 기본 대미지 +${R.flameTrailDamageAdd}.`,
+    },
+    'safety-net': {
+      name: '비상 안전망',
+      description: '웨이브당 1회, 바닥으로 떨어지는 공을 받아 위로 튕겨낸다.',
+    },
+    'scrap-cycle': {
+      name: '재활용 루틴',
+      description: `한 턴에 콤보 ${R.scrapCycleCombo}를 달성하면 버린 카드 더미에 폭탄 구체 1장을 만든다. (웨이브 종료 시 소멸)`,
+    },
+  },
+  patterns: {
+    full: '기본 진형',
+    checker: '체스판',
+    'inverted-triangle': '역삼각형',
+    shield: '보호막',
+    diamond: '다이아몬드',
+    columns: '기둥',
+  },
+
+  common: {
+    score: '점수',
+    turn: '턴',
+    combo: '콤보',
+    turns: (n) => `${n}턴`,
+    mute: '음소거',
+    unmute: '소리 켜기',
+    enterFullscreen: '전체 화면',
+    exitFullscreen: '전체 화면 끝내기',
+    retry: '다시 도전',
+  },
+
+  hud: {
+    currentWave: '현재 웨이브',
+    reinforcementsLeft: (rows) => `증원 ${rows}줄 남음`,
+    reinforcementsDone: '증원 끝 — 남은 벽돌만',
+    discarded: '버린 카드',
+    bricksLeft: '남은 벽돌',
+    currentCard: '현재 카드',
+    cardsLeft: '남은 카드',
+    temporary: '임시',
+    waiting: '대기 중…',
+    deck: '보유 덱',
+    records: '최고 기록',
+    recordWave: '웨이브',
+    recordBricks: '누적 파괴',
+    settings: '설정',
+    sound: '사운드',
+    soundOn: '🔊 켜짐',
+    soundMuted: '🔇 음소거됨',
+    paddleControl: '패들 조작',
+    paddleControlAria: '패들 조작 방식',
+    mouse: '마우스',
+    keyboard: '키보드',
+    keyboardModeNote:
+      '마우스를 움직여도 패들이 따라가지 않습니다. A/D 또는 ←/→ 로 조작하세요. 터치 드래그는 이 설정과 상관없이 항상 동작합니다.',
+    display: '화면',
+    language: '언어',
+    relics: '패시브 유물',
+    relicCount: (n) => `${n}개`,
+    relicsEmpty: '웨이브를 클리어하면 얻을 수 있습니다.',
+    chargesLeft: (left, total) => `이번 웨이브 남은 횟수 ${left} / ${total}`,
+    comboBest: (n) => `최고 ${n}`,
+    comboUnit: '연속 타격',
+    untilDeadline: '데드라인까지',
+    deadlineWarning: '벽돌이 경고선에 닿으면 즉시 패배합니다.',
+    newGame: '새 게임',
+    confirmRestart: '진행 중인 판을 버립니다 — 한 번 더 누르면 확정',
+  },
+
+  compact: {
+    deadline: '데드라인',
+    incoming: '증원',
+    incomingRows: (rows) => `${rows}줄`,
+    incomingDone: '끝',
+    waiting: '대기 중',
+    relicsAria: '보유 유물',
+    openInfo: '자세한 정보 · 설정 · 새 게임',
+  },
+
+  hints: {
+    move: '이동',
+    launch: '발사',
+    pickCard: '카드 선택',
+    skip: '스킵',
+    tap: '탭',
+    drag: '드래그',
+    movePaddle: '패들 이동',
+    pickOrSkip: '카드 선택 · 스킵',
+    keyboardAria: '키보드 조작 가이드',
+    touchAria: '터치 조작 가이드',
+  },
+
+  reward: {
+    aria: '웨이브 클리어 보상',
+    title: '보상을 하나 고르세요',
+    subtitle: '볼은 덱에 추가되고, 유물은 즉시 효과가 적용됩니다.',
+    skip: '스킵 — 아무것도 받지 않고 다음 웨이브로',
+    typeRelic: '패시브 유물',
+    typeBall: '새로운 볼',
+    relicAlwaysOn: '보유하는 동안 계속 적용',
+    statPierce: '관통',
+    statBlast: '폭발',
+    statSplit: (pieces) => `${pieces}분열`,
+    currentDeck: '현재 덱',
+    relics: '유물',
+  },
+
+  result: {
+    ariaVictory: '승리 결과',
+    ariaGameOver: '게임 오버 결과',
+    finalWave: '최종 웨이브',
+    totalScore: '총 점수',
+    bestCombo: '최장 콤보',
+    bricksDestroyed: '파괴한 벽돌',
+    highScore: '최고 점수',
+    previous: (score) => `(이전 ${score})`,
+    bestWave: '최고 웨이브',
+    totalBricks: '누적 파괴',
+    finalDeck: (cards) => `최종 덱 · ${cards}장`,
+    relics: (n) => `유물 · ${n}개`,
+    noRelics: '이번 판에서는 유물을 얻지 못했습니다.',
+    retryHint: '(R 키 또는 클릭)',
+  },
+
+  app: {
+    rotateHint: ['폰을 ', '가로로 돌리면', ' 게임 화면이 2배 넘게 커집니다.'],
+    homeScreenHint: ['공유 → ', '홈 화면에 추가', '로 실행하면 주소창 없이 전체 화면으로 열립니다.'],
+    infoAria: '게임 정보',
+    paused: '게임을 일시정지했습니다',
+    closeInfo: '닫고 계속하기',
+  },
+};
+
+export const STRINGS: Record<Language, Strings> = { en, ko };
+
+/** 엔진 데이터(볼 · 유물 · 패턴 이름)의 기본 문구로 쓰는 영어 사전 */
+export const EN = en;
+
+export function isLanguage(value: unknown): value is Language {
+  return value === 'en' || value === 'ko';
+}
+
+/** 사전에 없는 유물(나중에 추가된 것)은 유물 자체에 적힌 문구로 대신한다. */
+export function relicText(t: Strings, relic: { id: string; name: string; description: string }): NameAndDescription {
+  const known = (t.relics as Record<string, NameAndDescription | undefined>)[relic.id];
+  return known ?? { name: relic.name, description: relic.description };
+}
+
+export function patternName(t: Strings, id: string, fallback: string): string {
+  return (t.patterns as Record<string, string | undefined>)[id] ?? fallback;
+}

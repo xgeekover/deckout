@@ -2,6 +2,8 @@ import { useEffect, useRef } from 'react';
 import { clampBallSpeed } from '../config/balance';
 import { resolveModifiers } from '../engine/Relics';
 import type { ResolvedModifiers } from '../engine/Relics';
+import { relicText } from '../i18n/strings';
+import { useStrings } from '../i18n/useStrings';
 import { BALL_STATS } from '../types/game';
 import type { BallType, DeckCard, Rarity, Relic, RewardItem } from '../types/game';
 import { useActivationGrace } from './useActivationGrace';
@@ -70,6 +72,7 @@ function RewardIcon({ item }: { item: RewardItem }) {
  * 실제로는 DMG 2 · SPD 552 짜리 공을 쏘게 된다.
  */
 function BallStatLine({ type, mods }: { type: BallType; mods: ResolvedModifiers }) {
+  const t = useStrings();
   const stats = BALL_STATS[type];
   const damage = stats.damage + mods.ballDamageAdd;
   const speed = Math.round(clampBallSpeed(stats.speed * mods.ballSpeedMul));
@@ -78,9 +81,9 @@ function BallStatLine({ type, mods }: { type: BallType; mods: ResolvedModifiers 
     <>
       DMG <b className={damage !== stats.damage ? boosted : 'font-normal'}>{damage}</b> · SPD{' '}
       <b className={speed !== stats.speed ? boosted : 'font-normal'}>{speed}</b>
-      {stats.pierce ? ' · 관통' : ''}
-      {stats.explosionRadius ? ' · 폭발' : ''}
-      {stats.splitCount ? ` · ${stats.splitCount + 1}분열` : ''}
+      {stats.pierce ? ` · ${t.reward.statPierce}` : ''}
+      {stats.explosionRadius ? ` · ${t.reward.statBlast}` : ''}
+      {stats.splitCount ? ` · ${t.reward.statSplit(stats.splitCount + 1)}` : ''}
     </>
   );
 }
@@ -96,10 +99,12 @@ function RewardCardView({
   mods: ResolvedModifiers;
   onChoose: (id: string) => void;
 }) {
+  const t = useStrings();
   const style = RARITY_STYLE[item.rarity];
   const isRelic = item.type === 'RELIC';
-  const title = isRelic ? item.relic.name : item.ball.name;
-  const description = isRelic ? item.relic.description : item.ball.description;
+  const text = isRelic ? relicText(t, item.relic) : t.balls[item.ball.ballType];
+  const title = text.name;
+  const description = text.description;
 
   // 좁은 화면: 아이콘 왼쪽 + 글 오른쪽의 낮은 가로 카드 (세 장이 한 화면에 들어온다)
   // sm 이상: 세로로 긴 카드 세 장을 나란히
@@ -110,7 +115,7 @@ function RewardCardView({
       onClick={() => onChoose(item.id)}
       className={`group flex items-center gap-3 rounded-2xl border bg-deck-panel/90 p-3 text-left transition duration-200 ease-out hover:-translate-y-1 hover:scale-[1.03] hover:bg-deck-panel focus-visible:scale-[1.03] focus-visible:outline-2 focus-visible:outline-deck-accent sm:min-h-64 sm:flex-col sm:gap-3 sm:p-5 sm:text-center sm:hover:-translate-y-1.5 sm:hover:scale-[1.04] ${style.border} ${style.hover}`}
     >
-      <div className="hidden w-full items-center justify-between sm:flex">
+      <div className="hidden w-full flex-wrap items-center justify-between gap-1 sm:flex">
         <RarityTag rarity={item.rarity} />
         <TypeTag isRelic={isRelic} />
       </div>
@@ -136,7 +141,7 @@ function RewardCardView({
         data-testid="reward-stats"
         className="hidden text-[11px] uppercase tracking-wider text-slate-500 sm:mt-auto sm:block"
       >
-        {isRelic ? '보유하는 동안 계속 적용' : <BallStatLine type={item.ball.ballType} mods={mods} />}
+        {isRelic ? t.reward.relicAlwaysOn : <BallStatLine type={item.ball.ballType} mods={mods} />}
       </span>
     </button>
   );
@@ -145,7 +150,7 @@ function RewardCardView({
 function RarityTag({ rarity }: { rarity: Rarity }) {
   return (
     <span
-      className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold tracking-widest ${RARITY_STYLE[rarity].tag}`}
+      className={`whitespace-nowrap rounded-full border px-2 py-0.5 text-[10px] font-semibold tracking-widest ${RARITY_STYLE[rarity].tag}`}
     >
       {rarity}
     </span>
@@ -153,13 +158,14 @@ function RarityTag({ rarity }: { rarity: Rarity }) {
 }
 
 function TypeTag({ isRelic }: { isRelic: boolean }) {
+  const t = useStrings();
   return (
     <span
-      className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
+      className={`whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-medium ${
         isRelic ? 'bg-fuchsia-500/15 text-fuchsia-200' : 'bg-deck-accent/15 text-deck-accent'
       }`}
     >
-      {isRelic ? '패시브 유물' : '새로운 볼'}
+      {isRelic ? t.reward.typeRelic : t.reward.typeBall}
     </span>
   );
 }
@@ -178,6 +184,7 @@ function countByType(deck: DeckCard[]): Array<[BallType, number]> {
  * 화면 전체를 덮는 스크롤 가능한 오버레이로 바꾸고 덱/유물 요약을 모달 안에 넣는다.
  */
 export function RewardModal({ wave, choices, deck, relics, onChoose, onSkip }: RewardModalProps) {
+  const t = useStrings();
   const dialogRef = useRef<HTMLDivElement>(null);
   const isArmed = useActivationGrace();
   const mods = resolveModifiers(relics);
@@ -198,15 +205,13 @@ export function RewardModal({ wave, choices, deck, relics, onChoose, onSkip }: R
       tabIndex={-1}
       role="dialog"
       aria-modal="true"
-      aria-label="웨이브 클리어 보상"
+      aria-label={t.reward.aria}
       className="fixed inset-0 z-30 flex items-start justify-center overflow-y-auto overscroll-contain bg-deck-bg/92 py-6 outline-none backdrop-blur-sm sm:items-center lg:absolute lg:z-10 lg:rounded-2xl lg:bg-deck-bg/88 lg:py-0"
     >
       <div className="w-full max-w-3xl px-4 text-center sm:px-6">
         <p className="text-xs uppercase tracking-[0.3em] text-deck-accent">wave {wave} clear</p>
-        <h2 className="mt-2 text-xl font-bold text-slate-100 sm:text-2xl">보상을 하나 고르세요</h2>
-        <p className="mt-1 text-xs text-slate-400">
-          볼은 덱에 추가되고, 유물은 즉시 효과가 적용됩니다.
-        </p>
+        <h2 className="mt-2 text-xl font-bold text-slate-100 sm:text-2xl">{t.reward.title}</h2>
+        <p className="mt-1 text-xs text-slate-400">{t.reward.subtitle}</p>
 
         <div className="mt-4 grid gap-3 sm:mt-6 sm:grid-cols-3 sm:gap-4">
           {choices.map((item, index) => (
@@ -225,20 +230,20 @@ export function RewardModal({ wave, choices, deck, relics, onChoose, onSkip }: R
           onClick={guarded(onSkip)}
           className="mt-4 rounded-xl border border-deck-edge px-5 py-2 text-xs text-slate-400 transition hover:border-slate-400 hover:text-slate-200 sm:mt-6"
         >
-          스킵 — 아무것도 받지 않고 다음 웨이브로
+          {t.reward.skip}
         </button>
 
         {/* lg 미만에서는 이 오버레이가 HUD 를 가린다 — 판단에 필요한 정보만 추려 보여준다 */}
         <div className="mt-5 flex flex-wrap items-center justify-center gap-1.5 text-[11px] text-slate-400 lg:hidden">
-          <span className="text-slate-500">현재 덱</span>
+          <span className="text-slate-500">{t.reward.currentDeck}</span>
           {countByType(deck).map(([type, count]) => (
             <span key={type} className="rounded-md border border-deck-edge px-1.5 py-0.5">
-              {BALL_STATS[type].label} ×{count}
+              {t.balls[type].name} ×{count}
             </span>
           ))}
-          {relics.length > 0 && <span className="ml-1 text-slate-500">유물</span>}
+          {relics.length > 0 && <span className="ml-1 text-slate-500">{t.reward.relics}</span>}
           {relics.map((relic) => (
-            <span key={relic.id} title={relic.name}>
+            <span key={relic.id} title={relicText(t, relic).name}>
               {relic.icon}
             </span>
           ))}

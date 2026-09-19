@@ -287,20 +287,20 @@ export function validateBalance(): string[] {
   const thinnest = Math.min(BALANCE.paddle.height, BALANCE.bricks.grid.height);
   if (stepTravel > thinnest / 2) {
     issues.push(
-      `ball.maxSpeed 가 너무 크다: 서브스텝당 ${stepTravel.toFixed(2)}px 이동 > 가장 얇은 충돌체의 절반 ${thinnest / 2}px (터널링 위험)`,
+      `ball.maxSpeed is too high: ${stepTravel.toFixed(2)}px per substep > half the thinnest collider, ${thinnest / 2}px (tunneling risk)`,
     );
   }
   for (const [type, s] of Object.entries(BALANCE.ball.stats)) {
-    if (s.speed > BALANCE.ball.maxSpeed) issues.push(`ball.stats.${type}.speed 가 maxSpeed 를 넘는다`);
+    if (s.speed > BALANCE.ball.maxSpeed) issues.push(`ball.stats.${type}.speed exceeds maxSpeed`);
   }
   const chance = BALANCE.rewards.rarityChance;
   const total = chance.COMMON + chance.RARE + chance.LEGENDARY;
-  if (Math.abs(total - 1) > 1e-9) issues.push(`rewards.rarityChance 합이 1이 아니다: ${total}`);
-  if (BALANCE.spawnRow.emptyChanceEnd <= 0) issues.push('spawnRow.emptyChanceEnd 는 0보다 커야 한다');
+  if (Math.abs(total - 1) > 1e-9) issues.push(`rewards.rarityChance does not sum to 1: ${total}`);
+  if (BALANCE.spawnRow.emptyChanceEnd <= 0) issues.push('spawnRow.emptyChanceEnd must be greater than 0');
   const { top, height, gap, rows } = BALANCE.bricks.grid;
   // 가장 낮게 시작하는 웨이브(startRowDropMax) 기준으로 본다.
   const lowest = top + (rows + BALANCE.waves.startRowDropMax) * (height + gap) - gap;
   const deadline = BALANCE.field.height - BALANCE.paddle.bottomOffset - BALANCE.turn.deadlineOffset;
-  if (lowest >= deadline) issues.push('초기 그리드가 이미 데드라인에 닿아 있다');
+  if (lowest >= deadline) issues.push('the starting grid already touches the deadline');
   return issues;
 }

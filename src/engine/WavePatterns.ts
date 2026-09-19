@@ -4,9 +4,12 @@
  */
 
 import { BALANCE, toughBrickChance, waveHpBonus } from '../config/balance.ts';
+import { EN } from '../i18n/strings.ts';
+import type { PatternId } from '../i18n/strings.ts';
 
 export interface WavePattern {
-  id: string;
+  id: PatternId;
+  /** 영어 이름. 화면에는 id 로 찾은 현재 언어의 이름을 쓴다. */
   name: string;
   /** 이 칸에 벽돌을 놓는가 */
   has(row: number, col: number, rows: number, cols: number): boolean;
@@ -16,26 +19,26 @@ export interface WavePattern {
 
 export const FULL: WavePattern = {
   id: 'full',
-  name: '기본 진형',
+  name: EN.patterns.full,
   has: () => true,
 };
 
 const CHECKER: WavePattern = {
   id: 'checker',
-  name: '체스판',
+  name: EN.patterns.checker,
   has: (row, col) => (row + col) % 2 === 0,
 };
 
 const INVERTED_TRIANGLE: WavePattern = {
   id: 'inverted-triangle',
-  name: '역삼각형',
+  name: EN.patterns['inverted-triangle'],
   // 아래로 갈수록 양끝에서 한 칸씩 좁아진다
   has: (row, col, _rows, cols) => col >= row && col <= cols - 1 - row,
 };
 
 const SHIELD: WavePattern = {
   id: 'shield',
-  name: '보호막',
+  name: EN.patterns.shield,
   // 맨 아랫줄이 단단한 보호막, 그 위 한 줄은 비워 둔다
   has: (row, _col, rows) => row !== rows - 2,
   hpBonus: (row, _col, rows) => (row === rows - 1 ? 2 : 0),
@@ -43,14 +46,14 @@ const SHIELD: WavePattern = {
 
 const DIAMOND: WavePattern = {
   id: 'diamond',
-  name: '다이아몬드',
+  name: EN.patterns.diamond,
   has: (row, col, rows, cols) =>
     Math.abs(row - (rows - 1) / 2) + Math.abs(col - (cols - 1) / 2) <= Math.max(rows, cols) / 2 - 1,
 };
 
 const COLUMNS: WavePattern = {
   id: 'columns',
-  name: '기둥',
+  name: EN.patterns.columns,
   has: (_row, col) => Math.floor(col / 2) % 2 === 0,
 };
 
