@@ -2,6 +2,10 @@
 
 > 고전 벽돌깨기(Breakout) × 덱빌딩 로그라이트. **공 한 발이 카드 한 장이다.**
 
+### [▶ 브라우저에서 바로 플레이](https://xgeekover.github.io/deckout/)
+
+설치 없이 데스크톱(마우스 · 키보드)과 폰(터치) 모두에서 된다. 기록은 각자의 브라우저에만 저장된다.
+
 ![Deckout 플레이 화면](docs/gameplay.gif)
 
 <sub>실제 플레이 녹화 — 폭탄 벽돌 연쇄 폭발 두 번(10개 · 8개)과 콤보 → 1웨이브 클리어 → 키보드 `2`로 유물(광폭 패들) 선택 → 2웨이브(체스판 진형). 벽돌 파괴와 웨이브 클리어는 전부 정상 게임 경로로 일어난 것이고, 자동화한 것은 공을 따라가는 패들뿐이다.</sub>
@@ -27,6 +31,10 @@ npm run dev      # http://localhost:5173
 npm run build    # tsc -b && vite build
 npm run lint     # oxlint
 ```
+
+### 배포
+
+`main` 에 push 하면 GitHub Actions(`.github/workflows/deploy.yml`)가 린트 → 빌드 → GitHub Pages 배포까지 자동으로 한다. Pages 는 `https://<user>.github.io/deckout/` 처럼 저장소 이름 하위 경로에서 서빙하므로 `vite.config.ts` 의 `base` 를 상대 경로(`./`)로 둔다 — 기본값(`/`)으로 빌드하면 `/assets/...` 를 도메인 루트에서 찾다가 404 가 나 빈 화면이 된다. 서버가 필요 없는 정적 사이트라 `dist/` 를 아무 정적 호스팅에 올려도 된다.
 
 ## 조작
 
