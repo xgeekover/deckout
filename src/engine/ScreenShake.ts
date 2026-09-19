@@ -54,6 +54,11 @@ export class ScreenShake {
     this.y = (Math.random() - 0.5) * amount;
   }
 
+  /** 아직 흔들리는 중인가 */
+  get active(): boolean {
+    return this.duration > 0;
+  }
+
   get offset(): { x: number; y: number } {
     return { x: this.x, y: this.y };
   }

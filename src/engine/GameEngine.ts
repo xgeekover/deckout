@@ -837,6 +837,9 @@ export class GameEngine {
       ensureMinVerticalSpeed(withSpeed({ x: ball.vx, y: -Math.abs(ball.vy) }, ball.baseSpeed)),
     );
     ball.fallChecked = false; // 다음 낙하 때 다시 물어볼 수 있게
+    // 구조한 공에게 온전한 시간을 새로 준다. 안 그러면 45초 워치독 직전에 구조된 공이
+    // 충전과 연출만 쓰고 0.1초도 안 돼 강제 종료된다 (구조 → 77~90ms 뒤 소멸을 실측으로 확인).
+    this.playElapsed = 0;
     this.netFlash = NET_FLASH_SECONDS;
     this.particles.emit(ball.x, FIELD.y + FIELD.h - 2, 26, '#7ef0ff', {
       speed: 300,
@@ -879,6 +882,11 @@ export class GameEngine {
       return;
     }
 
+    // 보상 화면에서는 모달이 캔버스를 덮고 물리도 멈춰 있다. 클리어 순간의 파티클·텍스트·흔들림이
+    // 가라앉은 뒤에는 장면이 더 달라지지 않으므로, 갱신과 렌더를 통째로 건너뛴다.
+    // (건너뛰지 않으면 보이지도 않는 캔버스를 초당 60번 다시 칠해 코어 하나의 ~11% 를 쓴다.)
+    if (this.state.phase === 'REWARD' && this.isSceneSettled()) return;
+
     this.accumulator += delta;
     while (this.accumulator >= FIXED_STEP) {
       this.step(FIXED_STEP);
@@ -913,6 +921,17 @@ export class GameEngine {
 
     this.render();
   };
+
+  /** 움직이는 연출이 하나도 남지 않았는가 */
+  private isSceneSettled(): boolean {
+    return (
+      this.particles.count === 0 &&
+      this.floating.count === 0 &&
+      !this.shake.active &&
+      this.hitStop <= 0 &&
+      this.netFlash <= 0
+    );
+  }
 
   private step(dt: number): void {
     const phase = this.state.phase;

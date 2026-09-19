@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { BALANCE } from '../config/balance';
 import { GameEngine } from '../engine/GameEngine';
 import { InputManager } from '../engine/InputManager';
 import { GAME_HEIGHT, GAME_WIDTH } from '../types/game';
@@ -62,7 +63,8 @@ export function GameCanvas({
     const applySize = () => {
       const cssWidth = wrapper.clientWidth;
       if (cssWidth <= 0) return;
-      engine.resize(cssWidth, (cssWidth * GAME_HEIGHT) / GAME_WIDTH, window.devicePixelRatio || 1);
+      const dpr = Math.min(window.devicePixelRatio || 1, BALANCE.render.maxDevicePixelRatio);
+      engine.resize(cssWidth, (cssWidth * GAME_HEIGHT) / GAME_WIDTH, dpr);
     };
     applySize();
 

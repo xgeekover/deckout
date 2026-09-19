@@ -1,4 +1,7 @@
 import { useEffect, useRef } from 'react';
+import { clampBallSpeed } from '../config/balance';
+import { resolveModifiers } from '../engine/Relics';
+import type { ResolvedModifiers } from '../engine/Relics';
 import { BALL_STATS } from '../types/game';
 import type { BallType, DeckCard, Rarity, Relic, RewardItem } from '../types/game';
 import { useActivationGrace } from './useActivationGrace';
@@ -61,20 +64,41 @@ function RewardIcon({ item }: { item: RewardItem }) {
   );
 }
 
+/**
+ * 카드에 찍는 수치는 "덱에 넣으면 실제로 날아갈 공" 기준이다.
+ * 기본 스탯표를 그대로 찍으면, 화염 도선을 가진 플레이어에게 DMG 1 · SPD 480 이라고 보여주고
+ * 실제로는 DMG 2 · SPD 552 짜리 공을 쏘게 된다.
+ */
+function BallStatLine({ type, mods }: { type: BallType; mods: ResolvedModifiers }) {
+  const stats = BALL_STATS[type];
+  const damage = stats.damage + mods.ballDamageAdd;
+  const speed = Math.round(clampBallSpeed(stats.speed * mods.ballSpeedMul));
+  const boosted = 'text-deck-gold';
+  return (
+    <>
+      DMG <b className={damage !== stats.damage ? boosted : 'font-normal'}>{damage}</b> · SPD{' '}
+      <b className={speed !== stats.speed ? boosted : 'font-normal'}>{speed}</b>
+      {stats.pierce ? ' · 관통' : ''}
+      {stats.explosionRadius ? ' · 폭발' : ''}
+    </>
+  );
+}
+
 function RewardCardView({
   item,
   index,
+  mods,
   onChoose,
 }: {
   item: RewardItem;
   index: number;
+  mods: ResolvedModifiers;
   onChoose: (id: string) => void;
 }) {
   const style = RARITY_STYLE[item.rarity];
   const isRelic = item.type === 'RELIC';
   const title = isRelic ? item.relic.name : item.ball.name;
   const description = isRelic ? item.relic.description : item.ball.description;
-  const stats = isRelic ? null : BALL_STATS[item.ball.ballType];
 
   // 좁은 화면: 아이콘 왼쪽 + 글 오른쪽의 낮은 가로 카드 (세 장이 한 화면에 들어온다)
   // sm 이상: 세로로 긴 카드 세 장을 나란히
@@ -100,12 +124,18 @@ function RewardCardView({
         </div>
         <span className="text-sm font-bold text-slate-100 sm:text-base">{title}</span>
         <span className="text-xs leading-relaxed text-slate-400">{description}</span>
+        {!isRelic && (
+          <span className="text-[11px] tracking-wider text-slate-500 sm:hidden">
+            <BallStatLine type={item.ball.ballType} mods={mods} />
+          </span>
+        )}
       </div>
 
-      <span className="hidden text-[11px] uppercase tracking-wider text-slate-500 sm:mt-auto sm:block">
-        {stats
-          ? `DMG ${stats.damage} · SPD ${stats.speed}${stats.pierce ? ' · 관통' : ''}${stats.explosionRadius ? ' · 폭발' : ''}`
-          : '보유하는 동안 계속 적용'}
+      <span
+        data-testid="reward-stats"
+        className="hidden text-[11px] uppercase tracking-wider text-slate-500 sm:mt-auto sm:block"
+      >
+        {isRelic ? '보유하는 동안 계속 적용' : <BallStatLine type={item.ball.ballType} mods={mods} />}
       </span>
     </button>
   );
@@ -149,6 +179,7 @@ function countByType(deck: DeckCard[]): Array<[BallType, number]> {
 export function RewardModal({ wave, choices, deck, relics, onChoose, onSkip }: RewardModalProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const isArmed = useActivationGrace();
+  const mods = resolveModifiers(relics);
 
   // 포커스를 다이얼로그 "자체"에 둔다. 첫 카드에 두면, 발사하려고 Space 를 누르던 손가락이
   // 그대로 첫 카드를 골라 버린다. 여기서 Tab 을 누르면 첫 카드로 간다.
@@ -182,6 +213,7 @@ export function RewardModal({ wave, choices, deck, relics, onChoose, onSkip }: R
               key={item.id}
               item={item}
               index={index}
+              mods={mods}
               onChoose={(id) => guarded(() => onChoose(id))()}
             />
           ))}

@@ -19,6 +19,15 @@ export const BALANCE = {
   /** 논리 해상도. 실제 캔버스 픽셀은 DPR/컨테이너 크기에 맞춰 스케일된다. */
   field: { width: 900, height: 640 },
 
+  render: {
+    /**
+     * 캔버스 백버퍼에 적용할 devicePixelRatio 상한.
+     * 백버퍼 픽셀 수는 DPR² 로 늘어난다 (DPR 3 이면 9배 — 1200px 폭 창에서 900만 픽셀을
+     * 매 프레임 지우고 다시 칠한다). 글로우 위주의 그래픽이라 2 를 넘겨도 눈에 띄는 이득이 없다.
+     */
+    maxDevicePixelRatio: 2,
+  },
+
   paddle: {
     /** 유물 보정 전 기본 너비 */
     baseWidth: 130,
