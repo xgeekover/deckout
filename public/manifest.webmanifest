@@ -1,0 +1,18 @@
+{
+  "name": "Deckout — Breakout × Deckbuilding Roguelite",
+  "short_name": "Deckout",
+  "description": "벽돌깨기 × 덱빌딩 로그라이트. 공 한 발이 카드 한 장이다.",
+  "lang": "ko",
+  "start_url": ".",
+  "scope": ".",
+  "display": "fullscreen",
+  "display_override": ["fullscreen", "standalone"],
+  "orientation": "landscape",
+  "background_color": "#070a14",
+  "theme_color": "#070a14",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

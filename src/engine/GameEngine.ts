@@ -201,6 +201,8 @@ export class GameEngine {
   private hitStop = 0;
   /** 0보다 크면 이 시간이 지난 뒤 루프를 멈춘다 (종료 연출 정산 창) */
   private stopDelay = 0;
+  /** 일시정지 — 정보 패널을 열어 둔 동안 공이 혼자 돌아다니지 않게 한다 */
+  private paused = false;
   /** 현재 턴 누적 연속 타격 수 */
   private combo = 0;
   /** 안전망 발동 직후 번쩍임 타이머(초) */
@@ -257,6 +259,14 @@ export class GameEngine {
   /* ---------------------------------------------------------------- */
   /* 외부 API (React 에서 호출)                                         */
   /* ---------------------------------------------------------------- */
+
+  /**
+   * 일시정지/재개. 멈춰 있는 동안에도 rAF 는 계속 돌지만 시간은 흐르지 않는다
+   * (lastTime 을 계속 당겨 두므로 재개하는 순간 밀린 시간이 한꺼번에 들어오지 않는다).
+   */
+  setPaused(paused: boolean): void {
+    this.paused = paused;
+  }
 
   /** 현재 phase (입력 계층이 키 처리 여부를 판단할 때 쓴다) */
   get phase(): GameState['phase'] {
@@ -458,6 +468,7 @@ export class GameEngine {
     this.shake.reset();
     this.hitStop = 0;
     this.stopDelay = 0;
+    this.paused = false;
     this.netFlash = 0;
     this.bricksDestroyed = 0;
     this.waveStartTurn = 1;
@@ -893,6 +904,8 @@ export class GameEngine {
     this.lastTime = now;
     if (!Number.isFinite(delta) || delta < 0) delta = 0;
     if (delta > MAX_FRAME_TIME) delta = MAX_FRAME_TIME; // 탭 복귀 시 death-spiral 방지
+
+    if (this.paused) return; // lastTime 은 위에서 이미 갱신됐다 — 멈춘 동안의 시간은 버려진다
 
     // 종료 연출 정산 창이 끝나면 루프를 멈춘다. 이번 프레임은 끝까지 그린다.
     if (this.stopDelay > 0) {

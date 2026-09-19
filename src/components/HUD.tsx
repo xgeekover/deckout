@@ -2,11 +2,13 @@ import { useEffect, useState } from 'react';
 import { BALL_STATS } from '../types/game';
 import type { BallType, DeckCard, GameState, Rarity, Relic } from '../types/game';
 import type { ControlMode, Records, Settings } from '../utils/storage';
+import type { FullscreenControl } from './useFullscreen';
 
 interface HUDProps {
   state: GameState;
   records: Records;
   settings: Settings;
+  fullscreen: FullscreenControl;
   onToggleMute: () => void;
   onControlModeChange: (mode: ControlMode) => void;
   onRestart: () => void;
@@ -57,6 +59,7 @@ export function HUD({
   state,
   records,
   settings,
+  fullscreen,
   onToggleMute,
   onControlModeChange,
   onRestart,
@@ -217,6 +220,23 @@ export function HUD({
             ))}
           </div>
         </div>
+        {fullscreen.supported && (
+          <div className="mt-2 flex items-center justify-between gap-3">
+            <span className="text-xs text-slate-300">화면</span>
+            <button
+              type="button"
+              aria-pressed={fullscreen.active}
+              data-testid="hud-fullscreen"
+              onClick={(e) => {
+                fullscreen.toggle();
+                e.currentTarget.blur();
+              }}
+              className="rounded-lg border border-deck-edge px-3 py-1 text-xs text-slate-300 transition hover:border-deck-accent hover:text-deck-accent"
+            >
+              {fullscreen.active ? '🗗 전체 화면 끝내기' : '⛶ 전체 화면'}
+            </button>
+          </div>
+        )}
         {settings.controlMode === 'keyboard' && (
           <p className="mt-2 text-[11px] leading-relaxed text-slate-500">
             마우스를 움직여도 패들이 따라가지 않습니다. A/D 또는 ←/→ 로 조작하세요. 터치 드래그는

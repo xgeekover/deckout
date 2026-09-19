@@ -3,7 +3,17 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- viewport-fit=cover: 노치 영역까지 쓰고 여백은 CSS 의 safe-area-inset 으로 직접 준다 -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#070a14" />
+    <meta name="description" content="벽돌깨기 × 덱빌딩 로그라이트. 공 한 발이 카드 한 장이다." />
+    <!-- 홈 화면에 추가해서 실행하면 주소창 없이 뜬다. 아이폰 Safari 는 Fullscreen API 가 없어서 이것이 유일한 전체 화면 경로다. -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Deckout" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <title>Deckout — Breakout Deckbuilder</title>
   </head>
   <body>

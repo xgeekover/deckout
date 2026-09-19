@@ -1,12 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { SoundManager } from './audio/SoundManager';
+import { CompactHUD } from './components/CompactHUD';
 import { GameCanvas } from './components/GameCanvas';
 import { GameOverModal } from './components/GameOverModal';
 import { HUD } from './components/HUD';
 import { KeyHints } from './components/KeyHints';
 import { RewardModal } from './components/RewardModal';
+import { useFullscreen } from './components/useFullscreen';
+import { useMediaQuery } from './components/useMediaQuery';
 import type { GameEngine } from './engine/GameEngine';
-import { createInitialGameState } from './types/game';
+import { GAME_HEIGHT, GAME_WIDTH, createInitialGameState } from './types/game';
 import type { GameState, RunSummary } from './types/game';
 import {
   RECORDS_KEY,
@@ -127,15 +130,95 @@ export default function App() {
     engine.restart();
   }, [sound]);
 
+  /*
+   * 레이아웃은 두 가지다.
+   *  - 일반: 캔버스 옆에 전체 HUD (넓은 화면)
+   *  - 게임 우선: 캔버스를 화면에 꽉 차게 맞추고 HUD 는 요약 바로 줄인다. 좁거나 낮은 화면(폰·가로로 든 폰)에서
+   *    자동으로 쓰이고, 전체 화면에 들어가면 데스크톱에서도 쓰인다.
+   * 폰에서 예전 레이아웃은 캔버스를 "폭" 기준으로만 잡고 그 아래에 긴 HUD 를 붙여서, 세로로는 356×253px 로
+   * 작았고 가로로 돌리면 캔버스가 화면 높이를 넘어 스크롤이 생겼다.
+   */
+  const fullscreen = useFullscreen();
+  const smallScreen = useMediaQuery('(max-width: 1023px), (max-height: 560px)');
+  const immersive = smallScreen || fullscreen.active;
+  const [infoOpen, setInfoOpen] = useState(false);
+  const showInfo = immersive && infoOpen;
+
+  // 정보 패널을 열어 둔 동안 공이 혼자 돌아다니지 않게 멈춘다.
+  useEffect(() => {
+    engineRef.current?.setPaused(showInfo);
+  }, [showInfo]);
+
   const isOver = state.phase === 'GAME_OVER' || state.phase === 'VICTORY';
   // 모달은 aria-modal 을 선언한다 — 그 약속대로 뒤의 HUD 를 실제로 비활성화해야
   // Tab 이나 클릭이 모달 뒤의 "새 게임" 같은 버튼에 닿지 않는다.
   const modalOpen = state.phase === 'REWARD' || (isOver && runEnd !== null);
 
+  const hud = (
+    <HUD
+      state={state}
+      records={records}
+      settings={settings}
+      fullscreen={fullscreen}
+      onToggleMute={handleToggleMute}
+      onControlModeChange={handleControlModeChange}
+      onRestart={() => {
+        handleRestart();
+        setInfoOpen(false);
+      }}
+      inert={modalOpen}
+    />
+  );
+
+  // 모드가 바뀌어도 GameCanvas 가 다시 마운트되면 안 된다 (엔진이 새로 만들어져 진행 중인 판이 사라진다).
+  // 그래서 트리 구조는 두 모드가 같고, 형제에는 key 를 줘서 앞에 요약 HUD 가 끼어들어도 자리가 밀리지 않게 한다.
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-6 p-4 lg:flex-row lg:items-start lg:p-8">
-      <div className="flex-1">
-        <div className="relative">
+    <main
+      className={
+        immersive
+          ? 'fixed inset-0 flex flex-col bg-deck-bg landscape:flex-row'
+          : 'mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-6 p-4 lg:flex-row lg:items-start lg:p-8'
+      }
+      style={
+        immersive
+          ? {
+              // 노치/홈 인디케이터 영역을 피한다 (홈 화면에 추가해 주소창 없이 실행했을 때 특히 필요)
+              paddingTop: 'env(safe-area-inset-top)',
+              paddingRight: 'env(safe-area-inset-right)',
+              paddingBottom: 'env(safe-area-inset-bottom)',
+              paddingLeft: 'env(safe-area-inset-left)',
+            }
+          : undefined
+      }
+    >
+      {immersive && (
+        <CompactHUD
+          key="compact-hud"
+          state={state}
+          isMuted={settings.isMuted}
+          fullscreen={fullscreen}
+          onToggleMute={handleToggleMute}
+          onOpenInfo={() => setInfoOpen(true)}
+        />
+      )}
+
+      <div
+        key="stage"
+        className={
+          immersive
+            ? // 크기 컨테이너: 안쪽 상자가 "이 영역에 들어가는 가장 큰 900:640" 이 되도록 cqw/cqh 로 계산한다
+              'flex min-h-0 min-w-0 flex-1 items-start justify-center [container-type:size] landscape:items-center'
+            : 'flex-1'
+        }
+      >
+        <div
+          className="relative"
+          style={
+            immersive
+              ? { width: `min(100cqw, calc(100cqh * ${GAME_WIDTH} / ${GAME_HEIGHT}))` }
+              : undefined
+          }
+        >
           <GameCanvas
             onEngineReady={handleEngineReady}
             onStateChange={setState}
@@ -158,20 +241,59 @@ export default function App() {
           {isOver && runEnd && (
             <GameOverModal summary={runEnd.summary} update={runEnd.update} onRestart={handleRestart} />
           )}
+
+          {/* 게임 우선 화면에는 하단 조작 가이드를 둘 자리가 없다. 처음 몇 턴 동안만 빈 플레이 필드 위에 얹어 보여준다. */}
+          {immersive && state.phase === 'AIMING' && state.turn.currentTurn <= 3 && (
+            <div
+              data-testid="overlay-hints"
+              className="pointer-events-none absolute inset-x-0 top-[58%] flex justify-center"
+            >
+              <KeyHints phase={state.phase} isMuted={settings.isMuted} />
+            </div>
+          )}
+
+          {immersive && (
+            <p className="pointer-events-none absolute inset-x-0 top-full mt-3 px-4 text-center text-[11px] leading-relaxed text-slate-500 landscape:hidden">
+              📱 폰을 <b className="text-slate-300">가로로 돌리면</b> 게임 화면이 2배 넘게 커집니다.
+              {!fullscreen.supported && (
+                <>
+                  <br />
+                  공유 → <b className="text-slate-300">홈 화면에 추가</b>로 실행하면 주소창 없이 전체 화면으로 열립니다.
+                </>
+              )}
+            </p>
+          )}
         </div>
 
-        <KeyHints phase={state.phase} isMuted={settings.isMuted} />
+        {!immersive && <KeyHints phase={state.phase} isMuted={settings.isMuted} />}
       </div>
 
-      <HUD
-        state={state}
-        records={records}
-        settings={settings}
-        onToggleMute={handleToggleMute}
-        onControlModeChange={handleControlModeChange}
-        onRestart={handleRestart}
-        inert={modalOpen}
-      />
+      {!immersive && <div key="hud">{hud}</div>}
+
+      {showInfo && (
+        <div
+          key="info-drawer"
+          role="dialog"
+          aria-modal="true"
+          aria-label="게임 정보"
+          className="fixed inset-0 z-40 overflow-y-auto overscroll-contain bg-deck-bg/97 p-4 backdrop-blur-sm"
+        >
+          <div className="mx-auto flex w-full max-w-md flex-col gap-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-slate-400">게임을 일시정지했습니다</span>
+              <button
+                type="button"
+                data-testid="close-info"
+                onClick={() => setInfoOpen(false)}
+                className="rounded-lg border border-deck-accent px-4 py-1.5 text-sm text-deck-accent"
+              >
+                닫고 계속하기
+              </button>
+            </div>
+            {hud}
+          </div>
+        </div>
+      )}
     </main>
   );
 }
