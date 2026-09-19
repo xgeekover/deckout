@@ -97,3 +97,73 @@ canvas {
   display: block;
   touch-action: none;
 }
+
+/* ── 오락실 스코어라인용 픽셀 폰트 ─────────────────────────────────────────────
+   Press Start 2P 가 라틴·숫자를, Galmuri 11 이 한글(사전에 쓰인 음절만 서브셋)을 맡는다.
+   둘 다 OFL — public/fonts/ 의 LICENSE 참고. 화면의 다른 글은 그대로 산세리프다. */
+@font-face {
+  font-family: "Press Start 2P";
+  src: url("/fonts/PressStart2P-latin.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Galmuri11";
+  src: url("/fonts/Galmuri11-subset.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+.font-arcade {
+  font-family: "Press Start 2P", "Galmuri11", ui-monospace, monospace;
+  -webkit-font-smoothing: none;
+  font-smooth: never;
+  letter-spacing: 0.02em;
+}
+
+/* CRT 흉내: 주사선 + 가장자리 비네트. 정적인 그라디언트라 프레임마다 비용이 들지 않는다. */
+.crt-overlay::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0) 0px,
+    rgba(0, 0, 0, 0) 2px,
+    rgba(0, 0, 0, 0.22) 2px,
+    rgba(0, 0, 0, 0.22) 3px
+  );
+  mix-blend-mode: multiply;
+}
+.crt-overlay::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: radial-gradient(ellipse at center, rgba(0, 0, 0, 0) 62%, rgba(0, 0, 0, 0.5) 100%);
+}
+
+/* "PRESS SPACE" 식 깜빡임. 움직임을 줄여 달라는 설정에서는 그냥 켜 둔다. */
+@keyframes arcade-blink {
+  0%,
+  55% {
+    opacity: 1;
+  }
+  56%,
+  100% {
+    opacity: 0.12;
+  }
+}
+.arcade-blink {
+  animation: arcade-blink 1.1s steps(1, end) infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .arcade-blink {
+    animation: none;
+  }
+}

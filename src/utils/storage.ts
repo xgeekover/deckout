@@ -28,6 +28,8 @@ export interface Settings {
   controlMode: ControlMode;
   /** 화면 문구의 언어. 이 필드가 없던 시절에 저장된 설정은 기본값(영어)으로 읽힌다. */
   language: Language;
+  /** 주사선·비네트 오버레이. 없던 필드는 켜진 것으로 읽힌다. */
+  crt: boolean;
 }
 
 /** 기록 갱신에 필요한 한 판의 결과 */
@@ -56,7 +58,7 @@ export const RECORDS_KEY = 'deckout:records:v1';
 export const SETTINGS_KEY = 'deckout:settings:v1';
 
 export const DEFAULT_RECORDS: Records = { highScore: 0, maxWave: 0, totalBricksDestroyed: 0 };
-export const DEFAULT_SETTINGS: Settings = { isMuted: false, controlMode: 'mouse', language: DEFAULT_LANGUAGE };
+export const DEFAULT_SETTINGS: Settings = { isMuted: false, controlMode: 'mouse', language: DEFAULT_LANGUAGE, crt: true };
 
 /** 브라우저의 localStorage. 쓸 수 없는 환경이면 null. */
 export function getDefaultStore(): KeyValueStore | null {
@@ -93,6 +95,7 @@ export function sanitizeSettings(raw: unknown): Settings {
     isMuted: r.isMuted === true,
     controlMode: r.controlMode === 'keyboard' ? 'keyboard' : 'mouse',
     language: isLanguage(r.language) ? r.language : DEFAULT_LANGUAGE,
+    crt: r.crt !== false,
   };
 }
 

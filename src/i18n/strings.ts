@@ -77,6 +77,9 @@ export interface Strings {
     keyboard: string;
     keyboardModeNote: string;
     display: string;
+    crt: string;
+    crtOn: string;
+    crtOff: string;
     language: string;
     relics: string;
     relicCount: (n: number) => string;
@@ -90,14 +93,28 @@ export interface Strings {
     confirmRestart: string;
   };
 
-  compact: {
+  /** 오락실 스코어라인 (픽셀 폰트, 짧은 대문자 라벨) */
+  arcade: {
+    score: string;
+    hiScore: string;
+    wave: string;
+    combo: string;
+    turn: string;
     deadline: string;
     incoming: string;
-    incomingRows: (rows: number) => string;
     incomingDone: string;
     waiting: string;
     relicsAria: string;
     openInfo: string;
+    promptLaunchKeyboard: string;
+    promptLaunchTouch: string;
+    promptPlaying: string;
+    promptResolving: string;
+    promptReward: string;
+    promptRewardTouch: string;
+    promptGameOver: string;
+    promptGameOverTouch: string;
+    promptVictory: string;
   };
 
   hints: {
@@ -251,6 +268,9 @@ const en: Strings = {
     keyboardModeNote:
       'The paddle will not follow the mouse. Use A/D or ←/→. Touch dragging always works, whatever this is set to.',
     display: 'Display',
+    crt: 'CRT effect',
+    crtOn: 'On',
+    crtOff: 'Off',
     language: 'Language',
     relics: 'Passive relics',
     relicCount: (n) => `${n} held`,
@@ -264,14 +284,27 @@ const en: Strings = {
     confirmRestart: 'This abandons your current run — press again to confirm',
   },
 
-  compact: {
-    deadline: 'Deadline',
-    incoming: 'Incoming',
-    incomingRows: (rows) => plural(rows, 'row'),
-    incomingDone: 'none',
-    waiting: 'Waiting',
+  arcade: {
+    score: 'SCORE',
+    hiScore: 'HI',
+    wave: 'WAVE',
+    combo: 'COMBO',
+    turn: 'TURN',
+    deadline: 'DEADLINE',
+    incoming: 'ROWS',
+    incomingDone: '--',
+    waiting: 'DRAWING…',
     relicsAria: 'Relics held',
     openInfo: 'Details · settings · new game',
+    promptLaunchKeyboard: 'PRESS SPACE TO LAUNCH',
+    promptLaunchTouch: 'TAP TO LAUNCH · DRAG TO MOVE',
+    promptPlaying: '',
+    promptResolving: 'BRICKS ADVANCING',
+    promptReward: 'CHOOSE A REWARD  1 · 2 · 3',
+    promptRewardTouch: 'CHOOSE A REWARD',
+    promptGameOver: 'GAME OVER · PRESS R',
+    promptGameOverTouch: 'GAME OVER',
+    promptVictory: 'YOU WIN',
   },
 
   hints: {
@@ -418,6 +451,9 @@ const ko: Strings = {
     keyboardModeNote:
       '마우스를 움직여도 패들이 따라가지 않습니다. A/D 또는 ←/→ 로 조작하세요. 터치 드래그는 이 설정과 상관없이 항상 동작합니다.',
     display: '화면',
+    crt: 'CRT 효과',
+    crtOn: '켬',
+    crtOff: '끔',
     language: '언어',
     relics: '패시브 유물',
     relicCount: (n) => `${n}개`,
@@ -431,14 +467,27 @@ const ko: Strings = {
     confirmRestart: '진행 중인 판을 버립니다 — 한 번 더 누르면 확정',
   },
 
-  compact: {
+  arcade: {
+    score: '점수',
+    hiScore: '최고',
+    wave: '웨이브',
+    combo: '콤보',
+    turn: '턴',
     deadline: '데드라인',
     incoming: '증원',
-    incomingRows: (rows) => `${rows}줄`,
-    incomingDone: '끝',
-    waiting: '대기 중',
+    incomingDone: '--',
+    waiting: '뽑는 중…',
     relicsAria: '보유 유물',
     openInfo: '자세한 정보 · 설정 · 새 게임',
+    promptLaunchKeyboard: 'SPACE 로 발사',
+    promptLaunchTouch: '탭: 발사 · 드래그: 이동',
+    promptPlaying: '',
+    promptResolving: '벽돌 전진 중',
+    promptReward: '보상을 고르세요  1 · 2 · 3',
+    promptRewardTouch: '보상을 고르세요',
+    promptGameOver: '게임 오버 · R 로 재도전',
+    promptGameOverTouch: '게임 오버',
+    promptVictory: '승리!',
   },
 
   hints: {

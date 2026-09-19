@@ -15,6 +15,7 @@ interface HUDProps {
   onToggleMute: () => void;
   onControlModeChange: (mode: ControlMode) => void;
   onLanguageChange: (language: Language) => void;
+  onCrtChange: (crt: boolean) => void;
   onRestart: () => void;
   /** 모달이 떠 있는 동안 HUD 전체를 비활성화한다 (포커스·클릭 모두 차단) */
   inert?: boolean;
@@ -59,6 +60,7 @@ export function HUD({
   onToggleMute,
   onControlModeChange,
   onLanguageChange,
+  onCrtChange,
   onRestart,
   inert = false,
 }: HUDProps) {
@@ -239,6 +241,23 @@ export function HUD({
             </button>
           </div>
         )}
+        <div className="mt-2 flex items-center justify-between gap-3">
+          <span className="text-xs text-slate-300">{t.hud.crt}</span>
+          <button
+            type="button"
+            aria-pressed={settings.crt}
+            data-testid="crt-toggle"
+            onClick={(e) => {
+              onCrtChange(!settings.crt);
+              e.currentTarget.blur();
+            }}
+            className={`rounded-lg border px-3 py-1 text-xs transition ${
+              settings.crt ? 'border-deck-accent/60 text-deck-accent' : 'border-slate-600 text-slate-500'
+            }`}
+          >
+            {settings.crt ? t.hud.crtOn : t.hud.crtOff}
+          </button>
+        </div>
         <div className="mt-2 flex items-center justify-between gap-3">
           <span className="text-xs text-slate-300">{t.hud.language}</span>
           <div role="radiogroup" aria-label={t.hud.language} className="flex overflow-hidden rounded-lg border border-deck-edge">

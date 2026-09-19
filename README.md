@@ -8,11 +8,11 @@
 
 No install. Works on desktop (mouse · keyboard) and on phones (touch). Records are stored only in your own browser. The game is in English by default; switch to Korean under **Settings → Language**.
 
-> 📱 **On a phone, turn it sideways** — the playfield is a wide 900×640, so the game gets more than twice as big. On Android the `⛶` button goes fullscreen (and locks landscape). On iPhone, use Safari's Share → **Add to Home Screen** and launch it from the icon to get rid of the address bar.
+> 📱 **On a phone, turn it sideways** — the playfield is a wide 900×640, so the game gets much bigger. On Android the `⛶` button goes fullscreen (and locks landscape). On iPhone, use Safari's Share → **Add to Home Screen** and launch it from the icon to get rid of the address bar.
 
 ![Deckout gameplay](docs/gameplay.gif)
 
-<sub>A real recording — two bomb-brick chain explosions (18 and 10 bricks) with a combo → wave 1 clear → picking a relic (Wide Paddle) with the `2` key → wave 2 (Checkerboard). Every brick break and the wave clear happened through the normal game path; the only automated part is the paddle following the ball.</sub>
+<sub>A real recording — two bomb-brick chain explosions (9 and 11 bricks) with a combo → wave 1 clear → picking a relic (Wide Paddle) with the `3` key → wave 2 (Checkerboard). Every brick break and the wave clear happened through the normal game path; the only automated part is the paddle following the ball.</sub>
 
 ## Features
 
@@ -21,6 +21,7 @@ No install. Works on desktop (mouse · keyboard) and on phones (touch). Records 
 - **4 relics** — 🏓 Wide Paddle · 🔥 Flame Trail · 🕸️ Safety Net · ♻️ Scrap Cycle.
 - **6 wave patterns** — Standard · Checkerboard · Inverted Triangle · Shield Wall · Diamond · Columns. HP and the share of tough bricks rise with each wave.
 - **Game feel** — particles, screen shake, hit-stop, ball trails, combo popups, chained bomb explosions, synthesized WebAudio sound effects.
+- **Arcade cabinet layout** — the playfield fills the window on every screen size; the score line runs along the top (SCORE · HI · WAVE · COMBO · DEADLINE) and the status line along the bottom (current card · relics · a blinking PRESS SPACE prompt), in pixel fonts, with optional CRT scanlines. Deck, records and settings sit behind `☰`.
 - **Fully playable from the keyboard** — launch, pick rewards (`1` `2` `3`), skip, mute and retry, all without a mouse.
 - **Saved records** — high score, best wave, all-time bricks destroyed and your settings persist in LocalStorage.
 - **English and Korean** — every on-screen string lives in one dictionary; the language is a saved setting.
@@ -53,10 +54,10 @@ Pushing to `main` makes GitHub Actions (`.github/workflows/deploy.yml`) lint →
 | `0` / `S` | Skip the reward (reward screen) |
 | `M` | Toggle mute |
 | `⛶` button | Enter/exit fullscreen (the browser's `Esc` exits too). Hidden in browsers without support (iPhone Safari) |
-| `☰` button | On small screens and in fullscreen: open the panel with deck · relics · records · settings · new game. **The game is paused while it is open** |
+| `☰` button | Open the panel with deck · relics · records · settings (sound, paddle control, CRT effect, language) · new game. **The game is paused while it is open** |
 | `R` | Try again — only on the game-over and victory screens. To restart mid-run use "New game" in the HUD; if a run is in progress you must **press it again within 3 seconds** to confirm |
 
-You can launch → pick rewards → retry entirely from the keyboard. The guide under the playfield shows the keys that work in the current phase.
+You can launch → pick rewards → retry entirely from the keyboard. The bottom line shows the prompt for the current phase, and the `☰` panel lists every key that works right now.
 
 Before launch the ball sits on the paddle, and **the aim line tilts in the direction you move the paddle** (up to ±36°).
 
@@ -141,12 +142,13 @@ App / HUD / RewardModal    GameEngine (rAF, fixed timestep 1/120s)
 | `src/engine/ScreenShake.ts` | Intensity/duration screen shake (pure logic, no dependencies) |
 | `src/engine/entities/*.ts` | Paddle / Ball / Brick |
 | `src/components/GameCanvas.tsx` | Canvas DOM binding, DPR resize, input → engine |
-| `src/components/HUD.tsx` | Wave · turn · deck · current card · records · settings |
-| `src/components/CompactHUD.tsx` | Summary HUD for the game-first layout — a top bar in portrait, a side column in landscape |
+| `src/components/HUD.tsx` | The full panel behind `☰`: wave · deck · current card · records · settings · new game |
+| `src/components/ArcadeBar.tsx` | The arcade score line (top) and status line (bottom); one merged line on short landscape screens |
+| `public/fonts/` | Press Start 2P (Latin) and a Galmuri 11 subset (Hangul) — the pixel fonts of the score line, both OFL |
 | `src/components/useFullscreen.ts` · `useMediaQuery.ts` | Fullscreen API (support check · landscape lock attempt) / `matchMedia` subscription |
 | `public/manifest.webmanifest` · icons | Launches fullscreen in landscape, without an address bar, when added to the home screen |
 | `src/components/GameOverModal.tsx` | Results — stats · final deck · relics · NEW RECORD fireworks |
-| `src/components/KeyHints.tsx` | Control guide under the playfield (per phase, keyboard or touch) |
+| `src/components/KeyHints.tsx` | Control guide (per phase, keyboard or touch) — in the `☰` panel, and over the playfield for the first turns on short landscape screens |
 | `src/components/RewardModal.tsx` | Wave clear reward card picker |
 
 ---
@@ -317,7 +319,7 @@ The magic numbers once scattered across the engine, entities, physics, rewards a
 
 ### Persistence (`src/utils/storage.ts`)
 
-`deckout:records:v1` (high score · best wave · all-time bricks destroyed) and `deckout:settings:v1` (mute · control mode · language). Storage is assumed to fail at any time — every access is wrapped in try/catch, every value read is sanitized (negatives · NaN · Infinity · strings · arrays · broken JSON → defaults), and if a write fails the game carries on with the in-memory values. The backend is injected as an argument, so it is verified without a DOM. Settings saved before the language field existed load as English with their other values intact.
+`deckout:records:v1` (high score · best wave · all-time bricks destroyed) and `deckout:settings:v1` (mute · control mode · language · CRT effect). Storage is assumed to fail at any time — every access is wrapped in try/catch, every value read is sanitized (negatives · NaN · Infinity · strings · arrays · broken JSON → defaults), and if a write fails the game carries on with the in-memory values. The backend is injected as an argument, so it is verified without a DOM. Settings saved before the language field existed load as English with their other values intact.
 
 New records: a score counts when it **beats** the previous one (ties and 0 do not), a wave when it beats the previous one and is at least wave 2 (so a first run does not announce "New record: wave 1"). A finished run is counted **exactly once**, from the engine's `onGameOver`/`onVictory` hooks; abandoning a run in progress with "New game" only adds its bricks destroyed.
 
@@ -337,16 +339,19 @@ Pointer movement is listened to on the **whole window**, not the canvas, and the
 
 Touch/pen follows **only drags that start on the canvas** (tracked by `pointerId`) — listening on the whole window meant a finger put down to scroll the HUD would drag the paddle too. And the only thing `Keyboard` control mode ignores is the mouse position: touch is always deliberate, so it is accepted in any mode. Otherwise, on a phone with no keyboard, one tap on `Keyboard` would remove every way to move the paddle, and because the setting is saved, a refresh would not fix it.
 
-### Small screens and fullscreen (`src/App.tsx`)
+### Arcade layout (`src/App.tsx` · `src/components/ArcadeBar.tsx`)
 
-There are two layouts. Wide screens put the full HUD beside the canvas; **narrow or short screens (`(max-width: 1023px), (max-height: 560px)`) and fullscreen switch to a "game-first" layout** — the canvas is fitted to the screen, the HUD shrinks to a one- or two-line summary (`CompactHUD`), and the rest (deck · relics · records · settings · new game) moves into the `☰` panel.
+There is one layout for every screen size: a score line on top, the playfield in the middle, a status line at the bottom — the way an arcade cabinet puts "1UP 012340 HI-SCORE" above the action and nothing else beside it. Everything that is not needed while a ball is in flight (deck, records, settings, new game, the key guide) lives behind `☰`.
 
-- The old mobile layout sized the canvas **by width only** and stacked a long HUD under it. On a phone held upright the canvas was a small 356×253px, and turned sideways it overflowed the screen height so you had to scroll to see the paddle. Now the remaining area is a size container (`container-type: size`) and the inner box's width is `min(100cqw, 100cqh × 900/640)`, which gives **the largest 900:640 that fits, whichever dimension is the tight one** (546×388 on an 844×390 landscape screen — 2.4× the area, zero page scroll).
-- **`GameCanvas` is never remounted** when the layout changes. A remount would create a new engine, wiping the run in progress the moment you rotate the phone or hit fullscreen mid-play. Both layouts keep the same tree shape and the siblings carry `key`s, so the summary HUD appearing in front does not shift the canvas's position (measured: the same engine instance before and after rotation and fullscreen).
-- While the `☰` panel covers the screen the engine is paused (`engine.setPaused`). `lastTime` keeps updating while paused, so no backlog of time gets simulated the instant it resumes.
-- The game-first layout has no room for the control guide under the playfield, so it is overlaid on the empty playfield **only while waiting to launch during the first 3 turns** (`pointer-events: none` — tapping on the text still launches).
-- **iPhone Safari does not support page fullscreen (the Fullscreen API)** — only video. So support is detected, the button is hidden, and "Add to Home Screen" is suggested instead — thanks to `manifest.webmanifest` (`display: fullscreen`, `orientation: landscape`) and the `apple-mobile-web-app-capable` meta tag, launching from the home screen icon opens without an address bar. The notch and home indicator are avoided with `viewport-fit=cover` + `env(safe-area-inset-*)`.
-- Entering fullscreen attempts `screen.orientation.lock('landscape')`. That only works in Android Chrome's fullscreen, so failure is silently ignored.
+- The playfield is the **largest 900:640 that fits between the two lines**: the middle area is a size container (`container-type: size`) and the inner box's width is `min(100cqw, 100cqh × 900/640)`, so whichever dimension is the tight one decides. On a 1280×800 window that is 1016×722 (72% of the window); the previous layout, with a full HUD beside the canvas, gave 902×641.
+- **Short landscape screens** (`(orientation: landscape) and (max-height: 560px)`, i.e. a phone held sideways) merge both lines into one 32px line at the top and drop the less urgent fields (HI, TURN, ROWS, the card count), because every pixel of height goes straight to the playfield: 501×356 on an 844×390 screen. That is 8% less area than the previous side-column layout for landscape phones — the price of the consistent top-line look — while a phone held upright gets the full two lines plus a rotate hint under the canvas.
+- Each line is `[a field area that may scroll sideways][buttons that never move]`. With the buttons inside the scrolling area, `☰ 🔊 ⛶` slid off the right edge on a 667px-wide phone and could not be tapped. On portrait phones the field area wraps onto two rows instead (height is free there), and the launch prompt takes a row of its own.
+- **`GameCanvas` is never remounted** when the bars change shape (two lines ↔ one line, fullscreen on/off). A remount would create a new engine and wipe the run in progress. The siblings carry `key`s so the canvas keeps its position in the tree.
+- While the `☰` panel covers the screen the engine is paused (`engine.setPaused`); `lastTime` keeps updating, so no backlog of time is simulated when it resumes.
+- **Pixel fonts**: Press Start 2P for Latin and digits, and for Hangul a subset of Galmuri 11 containing only the 271 syllables used in the string dictionary (10KB instead of 505KB). Press Start 2P has no Hangul, so Korean labels fall through to Galmuri via the `font-family` list. Both are OFL and bundled in `public/fonts/`. The rest of the UI stays in the system sans — pixel type at modal sizes is tiring.
+- **CRT effect**: a scanline pattern (`repeating-linear-gradient`, multiply-blended) plus a vignette, as two pseudo-elements over the canvas. Static gradients composite once and cost nothing per frame; the screen shake happens inside the canvas, so the "glass" stays still like a real tube. It can be turned off in settings (saved).
+- The launch prompt blinks (`steps(1)` opacity), and stays lit under `prefers-reduced-motion`.
+- **iPhone Safari does not support page fullscreen (the Fullscreen API)** — only video. So support is detected, the `⛶` button is hidden, and "Add to Home Screen" is suggested under the canvas in portrait — thanks to `manifest.webmanifest` (`display: fullscreen`, `orientation: landscape`) and the `apple-mobile-web-app-capable` meta tag, launching from the home screen icon opens without an address bar. The notch and home indicator are avoided with `viewport-fit=cover` + `env(safe-area-inset-*)`. Entering fullscreen attempts `screen.orientation.lock('landscape')`, which only works in Android Chrome's fullscreen, so failure is silently ignored.
 
 ### Modals
 
@@ -394,7 +399,7 @@ There is no test runner yet. Instead, three things were run at every step.
 
 - **Numerical simulation** — the pure modules (`Physics` · `balance` · `storage` · `strings` · `Rewards` · `Relics` · `WavePatterns` · `InputManager.resolveKey` · `ParticleSystem` · `ScreenShake`) have no DOM dependency and import with `.ts` extensions, so Node 24's type stripping runs **the real source as is**. Examples: 0 residual overlap · 0 field escapes · speed error < 1e-13 over 11 launch angles × 60 seconds of play; 0 ghost collisions in a 160,000-position sweep around the paddle; 69.91 / 25.10 / 4.99% over 200,000 rarity rolls; identical key structure across the English and Korean dictionaries, with no Korean in the English one.
 - **Adversarial code review** — independent reviews were given the task "refute the claim that this code is correct", and only findings that came with an executed reproduction were accepted as bugs and fixed. That is how tunneling through the gap between adjacent bricks, the infinite vertical rally off the paddle's dead center (a soft-lock), weak shakes extending strong ones forever, ghost bounces off bricks an explosion had removed, and the ghost paddle were caught.
-- **Browser measurement** — Playwright drives the real build and measures canvas pixels and the DOM (36px brick descent, a 36ms hit-stop freeze, paddle width 130→156px, LocalStorage values matching the numbers on the results screen, no Korean text anywhere on screen in any phase in English mode, and so on).
+- **Browser measurement** — Playwright drives the real build and measures canvas pixels and the DOM (36px brick descent, a 36ms hit-stop freeze, paddle width 130→156px, LocalStorage values matching the numbers on the results screen, no Korean text anywhere on screen in any phase in English mode, the score line's buttons on screen and no clipped fields on six screen sizes × two languages × three phases, and so on).
 
 ## Known limitations and next steps
 
@@ -402,7 +407,8 @@ There is no test runner yet. Instead, three things were run at every step.
 - Bomb bricks always have 1 HP regardless of wave HP scaling (the intent: a bomb is a detonator, not a wall). Where one lands on the Shield Wall pattern's +2 row, only that cell is weak.
 - The `tough`/`core` brick classification (`BrickType`) is emitted as data only and drives no behavior.
 - Performance was measured only on an Apple M4 (headless with GPU acceleration): `render()` averages 0.35–0.58ms, worst case 3.1ms, 0 long tasks. Headless rAF is not vsync-locked, so **frame pacing on a real display and the cost on low-end/mobile GPUs are unmeasured**. Per-brick gradient/shadow caching was confirmed to change call counts but never shown to save time, so it was not applied.
-- The small-screen layout was verified with device emulation (portrait 390×844 · landscape 844×390, touch, DPR 3). **Address bar collapsing, the notch, and home-screen launch on a real phone are unconfirmed.** Inside an iPhone Safari browser tab there is no way to remove the address bar (you have to add it to the home screen).
+- The layout was verified with device emulation (portrait 390×844 · landscape 844×390 and 667×375, touch, DPR 2–3). **Address bar collapsing, the notch, and home-screen launch on a real phone are unconfirmed.** Inside an iPhone Safari browser tab there is no way to remove the address bar (you have to add it to the home screen).
+- The Hangul pixel font is subset to the syllables used in `src/i18n/strings.ts`; a new Korean string with a syllable outside that set falls back to the system font on the score line until the subset is regenerated (`pyftsubset`, see `public/fonts/README.md`).
 - The English text has not been reviewed by a native-speaking editor. Code comments and commit messages are in Korean.
 - If two tabs finish a run within about 1ms of each other, their record writes can overwrite one another (read-modify-write). It is practically impossible to happen naturally, so it was left alone. Record updates from other tabs reach the HUD through the `storage` event.
 - The sound effects are synthesized and have not been tuned by ear. Bricks destroyed in a run in progress are not added to the total if you just close the page.
