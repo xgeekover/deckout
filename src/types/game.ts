@@ -247,6 +247,8 @@ export interface GameState {
   score: number;
   /** 이번 웨이브의 배치 패턴 이름 */
   wavePattern: string;
+  /** 이번 웨이브에 앞으로 더 들어올 수 있는 새 줄의 수 */
+  reinforcementsLeft: number;
   /** 보유 덱 전체 (영구 카드) */
   deck: DeckCard[];
   /** 아직 뽑지 않은 카드 수 */
@@ -280,6 +282,7 @@ export const createInitialGameState = (): GameState => ({
   turn: { currentTurn: 1, canLaunch: false },
   wave: 1,
   wavePattern: '',
+  reinforcementsLeft: 0,
   score: 0,
   deck: [],
   drawPileCount: 0,

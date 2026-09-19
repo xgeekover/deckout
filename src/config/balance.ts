@@ -92,7 +92,7 @@ export const BALANCE = {
   bricks: {
     grid: { rows: 5, cols: 8, gap: 8, sideMargin: 48, top: 92, height: 28 },
     /** 행별 기본 HP (0번이 최상단) */
-    rowHp: [3, 2, 2, 1, 1],
+    rowHp: [2, 2, 1, 1, 1],
     bomb: {
       radius: 96,
       damage: 2,
@@ -105,8 +105,15 @@ export const BALANCE = {
 
   /** 웨이브 스케일링 */
   waves: {
-    /** N 웨이브마다 모든 벽돌 HP +1 */
-    hpBonusEveryWaves: 2,
+    /** 웨이브당 모든 벽돌에 더해지는 HP. 보너스 = floor((wave-1) × hpPerWave) */
+    hpPerWave: 0.75,
+    /**
+     * 후반 웨이브일수록 초기 배치가 더 낮은 곳에서 시작한다: N 웨이브마다 한 줄씩, 최대 max 줄.
+     * HP 만 올리면 웨이브가 "위험해지는" 게 아니라 "길어질" 뿐이다 (봇 계측: 한 판 20분 이상).
+     * 시작 위치를 내리면 데드라인까지의 여유 턴이 줄어, 길이를 늘리지 않고 압박을 올릴 수 있다.
+     */
+    startRowDropEveryWaves: 3,
+    startRowDropMax: 3,
     /** 추가 +1 HP("단단한 벽돌") 확률 = min(perWave × (wave-1), max) */
     toughChancePerWave: 0.12,
     toughChanceMax: 0.6,
@@ -116,14 +123,31 @@ export const BALANCE = {
 
   /** 턴 정산 때 상단에 새로 들어오는 행 */
   spawnRow: {
-    /** 이 턴 수에 걸쳐 난이도가 0 → 1 로 오른다 */
-    rampTurns: 24,
+    /**
+     * 신규 행 난이도(0~1) = 웨이브 진행분 + 그 웨이브를 오래 끈 만큼의 가산.
+     *  - 웨이브 진행분: 1웨이브 0 → (1 + rampWaves)웨이브에서 1
+     *  - 끌기 가산: 한 웨이브에서 stallTurns 턴에 걸쳐 최대 stallBonus
+     *
+     * "게임 시작부터의 누적 턴"을 기준으로 삼으면 안 된다. 느린 플레이어일수록 턴이 쌓여
+     * 줄이 더 단단해지고, 그래서 더 느려지는 악순환이 된다 (봇 계측: 보통 실력의 3웨이브가 16턴짜리 늪).
+     */
+    rampWaves: 9,
+    stallTurns: 16,
+    stallBonus: 0.25,
+    /**
+     * 웨이브별 증원 한도: 새 줄은 웨이브마다 (base + perWave × (wave-1)) 줄까지만 들어온다.
+     * 한도를 다 쓴 뒤에도 남은 벽돌은 매 턴 계속 내려오므로 데드라인의 압박은 그대로다.
+     *
+     * 한도가 없으면 새 줄은 끝없는 수도꼭지가 된다. 깎는 속도가 들어오는 속도와 비슷한 플레이어에게는
+     * 웨이브 길이에 상한이 없어져, 지지도 이기지도 않는 소모전이 수십 턴 이어진다.
+     */
+    reinforcements: { base: 5, perWave: 1 },
     /** 빈 칸 확률: start → end. 0이 되면 공 하나로 줄을 걷어낼 수 없으니 남겨 둔다 */
-    emptyChanceStart: 0.3,
-    emptyChanceEnd: 0.15,
+    emptyChanceStart: 0.45,
+    emptyChanceEnd: 0.2,
     /** 상위 HP 칸 확률 = base + ramp × 난이도, HP = hp + floor(hpRamp × 난이도) */
-    high: { chanceBase: 0.18, chanceRamp: 0.3, hp: 3, hpRamp: 2 },
-    mid: { chanceBase: 0.32, chanceRamp: -0.1, hp: 2, hpRamp: 1.5 },
+    high: { chanceBase: 0.06, chanceRamp: 0.34, hp: 3, hpRamp: 2 },
+    mid: { chanceBase: 0.24, chanceRamp: 0.0, hp: 2, hpRamp: 1.5 },
   },
 
   turn: {
@@ -186,9 +210,15 @@ export const BALANCE = {
 /* 스케일링 공식                                                        */
 /* ------------------------------------------------------------------ */
 
-/** 웨이브에 따라 모든 벽돌에 더해지는 HP: floor((wave - 1) / N) */
+/** 웨이브에 따라 모든 벽돌에 더해지는 HP: floor((wave - 1) × hpPerWave) */
 export function waveHpBonus(wave: number): number {
-  return Math.floor(Math.max(0, wave - 1) / BALANCE.waves.hpBonusEveryWaves);
+  return Math.floor(Math.max(0, wave - 1) * BALANCE.waves.hpPerWave);
+}
+
+/** 이 웨이브의 초기 배치를 몇 줄 아래에서 시작하는가 */
+export function waveStartRowDrop(wave: number): number {
+  const { startRowDropEveryWaves, startRowDropMax } = BALANCE.waves;
+  return Math.min(Math.floor(Math.max(0, wave - 1) / startRowDropEveryWaves), startRowDropMax);
 }
 
 /** 웨이브에서 칸 하나가 "단단한 벽돌"(+1 HP)이 될 확률 */
@@ -203,18 +233,27 @@ export function bombBrickChance(turn: number): number {
   return Math.min(chanceBase + chancePerTurn * Math.max(0, turn), chanceMax);
 }
 
-/** 신규 행 난이도 0~1 */
-export function spawnDifficulty(turn: number): number {
-  return Math.min(Math.max(0, turn) / BALANCE.spawnRow.rampTurns, 1);
+/** 이 웨이브에 들어올 수 있는 새 줄의 총수 */
+export function reinforcementBudget(wave: number): number {
+  const { base, perWave } = BALANCE.spawnRow.reinforcements;
+  return Math.max(0, Math.floor(base + perWave * Math.max(0, wave - 1)));
+}
+
+/** 신규 행 난이도 0~1. 웨이브 진행이 주도하고, 한 웨이브를 오래 끌면 조금 더 오른다. */
+export function spawnDifficulty(wave: number, turnsInWave: number): number {
+  const { rampWaves, stallTurns, stallBonus } = BALANCE.spawnRow;
+  const progress = Math.max(0, wave - 1) / rampWaves;
+  const stall = Math.min(Math.max(0, turnsInWave) / stallTurns, 1) * stallBonus;
+  return Math.min(progress + stall, 1);
 }
 
 /**
  * 신규 행의 칸 HP 를 난수 r(0~1) 로 결정한다. 0 은 빈 칸.
- * 난수를 인자로 받아 공식 자체를 결정적으로 검증할 수 있다.
+ * 난이도와 난수를 인자로 받아 공식 자체를 결정적으로 검증할 수 있다.
  */
-export function spawnCellHp(turn: number, r: number): number {
+export function spawnCellHp(difficulty: number, r: number): number {
   const { emptyChanceStart, emptyChanceEnd, high, mid } = BALANCE.spawnRow;
-  const t = spawnDifficulty(turn);
+  const t = Math.min(Math.max(difficulty, 0), 1);
   const empty = emptyChanceStart + (emptyChanceEnd - emptyChanceStart) * t;
   if (r < empty) return 0;
   const highEnd = empty + high.chanceBase + high.chanceRamp * t;
@@ -222,6 +261,14 @@ export function spawnCellHp(turn: number, r: number): number {
   const midEnd = highEnd + mid.chanceBase + mid.chanceRamp * t;
   if (r < midEnd) return mid.hp + Math.floor(mid.hpRamp * t);
   return 1;
+}
+
+/** 난이도 d 에서 신규 행 한 칸의 기대 HP (밸런스 점검용) */
+export function expectedSpawnCellHp(difficulty: number): number {
+  const N = 2000;
+  let sum = 0;
+  for (let i = 0; i < N; i++) sum += spawnCellHp(difficulty, (i + 0.5) / N);
+  return sum / N;
 }
 
 /** 볼 속력을 상한으로 자른다. */
@@ -251,7 +298,8 @@ export function validateBalance(): string[] {
   if (Math.abs(total - 1) > 1e-9) issues.push(`rewards.rarityChance 합이 1이 아니다: ${total}`);
   if (BALANCE.spawnRow.emptyChanceEnd <= 0) issues.push('spawnRow.emptyChanceEnd 는 0보다 커야 한다');
   const { top, height, gap, rows } = BALANCE.bricks.grid;
-  const lowest = top + rows * (height + gap) - gap;
+  // 가장 낮게 시작하는 웨이브(startRowDropMax) 기준으로 본다.
+  const lowest = top + (rows + BALANCE.waves.startRowDropMax) * (height + gap) - gap;
   const deadline = BALANCE.field.height - BALANCE.paddle.bottomOffset - BALANCE.turn.deadlineOffset;
   if (lowest >= deadline) issues.push('초기 그리드가 이미 데드라인에 닿아 있다');
   return issues;

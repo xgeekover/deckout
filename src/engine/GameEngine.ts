@@ -12,7 +12,10 @@ import {
   BALANCE,
   bombBrickChance,
   clampBallSpeed,
+  reinforcementBudget,
   spawnCellHp,
+  spawnDifficulty,
+  waveStartRowDrop,
 } from '../config/balance';
 import { FloatingTextSystem } from './FloatingText';
 import { ParticleSystem } from './ParticleSystem';
@@ -204,6 +207,10 @@ export class GameEngine {
   private netFlash = 0;
   /** 이번 판에서 파괴한 벽돌 수 */
   private bricksDestroyed = 0;
+  /** 현재 웨이브가 시작된 턴 — 신규 행 난이도의 "이 웨이브를 얼마나 끌었나" 계산용 */
+  private waveStartTurn = 1;
+  /** 이번 웨이브에 앞으로 더 들어올 수 있는 새 줄의 수 */
+  private reinforcementsLeft = 0;
   /** 한 번의 충돌 처리에서 모은 점수/파괴 여부/연쇄 폭발 */
   private scoreBuffer = 0;
   private destroyedBuffer = false;
@@ -453,6 +460,7 @@ export class GameEngine {
     this.stopDelay = 0;
     this.netFlash = 0;
     this.bricksDestroyed = 0;
+    this.waveStartTurn = 1;
     this.combo = 0;
     this.pendingBlasts.length = 0;
     this.scoreBuffer = 0;
@@ -472,6 +480,8 @@ export class GameEngine {
 
   private startWave(): void {
     const wave = this.state.wave;
+    this.waveStartTurn = this.state.turn.currentTurn;
+    this.reinforcementsLeft = reinforcementBudget(wave);
     let pattern = patternForWave(wave);
     this.buildBricks(wave, pattern);
     // 아주 작은 그리드(예: 2x2)에서는 다이아몬드 같은 패턴이 한 칸도 못 채울 수 있다.
@@ -493,6 +503,7 @@ export class GameEngine {
 
     this.patchState({
       wavePattern: pattern.name,
+      reinforcementsLeft: this.reinforcementsLeft,
       bricksRemaining: this.bricks.length,
       deck: this.deck,
       discardPileCount: 0,
@@ -506,10 +517,11 @@ export class GameEngine {
    */
   private buildBricks(wave: number, pattern: WavePattern): void {
     const { rows, cols } = this.grid;
+    const drop = waveStartRowDrop(wave); // 후반 웨이브는 더 낮은 곳에서 시작한다 (데드라인까지의 여유 턴 감소)
     this.bricks = [];
 
     for (let row = 0; row < rows; row++) {
-      const y = this.grid.top + row * rowPitch(this.grid);
+      const y = this.grid.top + (row + drop) * rowPitch(this.grid);
       const cells = this.spawnRow(y, (col) => {
         if (!pattern.has(row, col, rows, cols)) return { hp: 0 };
         const hp = waveCellHp(wave, row) + (pattern.hpBonus?.(row, col, rows, cols) ?? 0);
@@ -634,12 +646,17 @@ export class GameEngine {
 
     // 신규 행은 그리드 상단보다 한 칸 위에서 시작해 함께 미끄러져 들어온다.
     const turn = this.state.turn.currentTurn;
-    const incoming = this.spawnRow(this.grid.top - pitch, () =>
-      this.rollCell(spawnCellHp(turn, Math.random()), turn),
-    );
-    for (const brick of incoming) {
-      brick.beginSlide(pitch);
-      this.bricks.push(brick);
+    // 증원 한도가 남아 있을 때만 새 줄이 들어온다. 다 쓴 뒤에도 위의 하강은 계속된다.
+    if (this.reinforcementsLeft > 0) {
+      this.reinforcementsLeft -= 1;
+      const difficulty = spawnDifficulty(this.state.wave, turn - this.waveStartTurn);
+      const incoming = this.spawnRow(this.grid.top - pitch, () =>
+        this.rollCell(spawnCellHp(difficulty, Math.random()), turn),
+      );
+      for (const brick of incoming) {
+        brick.beginSlide(pitch);
+        this.bricks.push(brick);
+      }
     }
 
     this.slideElapsed = 0;
@@ -663,6 +680,7 @@ export class GameEngine {
     const endedTurn = this.state.turn.currentTurn;
     this.patchState({
       bricksRemaining: this.bricks.length,
+      reinforcementsLeft: this.reinforcementsLeft,
       turnsUntilDeadline: this.computeTurnsUntilDeadline(),
     });
     this.hooks.onTurnEnd?.(endedTurn);

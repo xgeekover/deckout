@@ -91,11 +91,20 @@ export function HUD({
             Wave {state.wave}
           </div>
         </div>
-        {state.wavePattern && (
-          <span className="rounded-full border border-deck-edge px-2.5 py-1 text-[11px] text-slate-300">
-            {state.wavePattern}
+        <div className="flex flex-col items-end gap-1">
+          {state.wavePattern && (
+            <span className="rounded-full border border-deck-edge px-2.5 py-1 text-[11px] text-slate-300">
+              {state.wavePattern}
+            </span>
+          )}
+          {/* 새 줄은 웨이브마다 정해진 수만큼만 들어온다. 0 이 되면 남은 벽돌만 치우면 된다. */}
+          <span
+            data-testid="reinforcements-left"
+            className={`text-[11px] tabular-nums ${state.reinforcementsLeft > 0 ? 'text-slate-400' : 'text-emerald-300'}`}
+          >
+            {state.reinforcementsLeft > 0 ? `증원 ${state.reinforcementsLeft}줄 남음` : '증원 끝 — 남은 벽돌만'}
           </span>
-        )}
+        </div>
       </section>
 
       <RelicBar relics={state.relics} charges={state.relicCharges} />
