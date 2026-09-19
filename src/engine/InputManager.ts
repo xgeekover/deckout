@@ -6,6 +6,7 @@
  * 마우스 없이 키보드만으로 발사 · 보상 선택 · 스킵 · 음소거 · 재시작까지 전부 가능하다.
  */
 
+import { BALANCE } from '../config/balance.ts';
 import { GAME_WIDTH } from '../types/game.ts';
 import type { GamePhase } from '../types/game.ts';
 import type { ControlMode } from '../utils/storage.ts';
@@ -60,6 +61,14 @@ export function resolveKey(key: string, phase: GamePhase): KeyCommand | null {
   return null;
 }
 
+/**
+ * 터치가 "탭"이었는가. 거의 움직이지 않았고 짧게 눌렀을 때만 탭이다.
+ * 순수 함수로 빼 둔 것은 경계값을 DOM 없이 검증하기 위해서다.
+ */
+export function isTap(movedPx: number, heldMs: number): boolean {
+  return movedPx <= BALANCE.input.tapMaxMovePx && heldMs <= BALANCE.input.tapMaxMs;
+}
+
 /** InputManager 가 조작하는 엔진의 표면. 테스트에서 가짜로 갈아 끼울 수 있다. */
 export interface InputEngine {
   readonly phase: GamePhase;
@@ -97,6 +106,8 @@ export class InputManager {
   private attached = false;
   /** 캔버스에서 시작해 아직 떼지 않은 터치/펜의 pointerId */
   private activeTouchId: number | null = null;
+  /** 그 터치가 시작된 위치와 시각, 그리고 시작점에서 가장 멀리 간 거리 — 탭/드래그 판별용 */
+  private touchStart = { x: 0, y: 0, time: 0, maxMove: 0 };
 
   constructor(canvas: HTMLCanvasElement, engine: InputEngine, options: InputOptions) {
     this.canvas = canvas;
@@ -162,7 +173,11 @@ export class InputManager {
   private onPointerMove = (e: PointerEvent): void => {
     // 터치/펜은 "캔버스에서 시작한 드래그"만 따라간다. 창 전체에서 받다 보니, HUD 를 스크롤하려고
     // 댄 손가락까지 패들을 끌고 다니게 된다 (좁은 화면에서는 HUD 가 캔버스 아래에 길게 이어진다).
-    if (e.pointerType !== 'mouse' && e.pointerId !== this.activeTouchId) return;
+    if (e.pointerType !== 'mouse') {
+      if (e.pointerId !== this.activeTouchId) return;
+      const moved = Math.hypot(e.clientX - this.touchStart.x, e.clientY - this.touchStart.y);
+      if (moved > this.touchStart.maxMove) this.touchStart.maxMove = moved;
+    }
     if (this.ignoresPointerPosition(e)) return;
     this.engine.setPointer(this.toLogicalX(e.clientX));
   };
@@ -177,7 +192,12 @@ export class InputManager {
   };
 
   private onPointerEnd = (e: PointerEvent): void => {
-    if (e.pointerId === this.activeTouchId) this.activeTouchId = null;
+    if (e.pointerId !== this.activeTouchId) return;
+    this.activeTouchId = null;
+    // 터치는 손을 "뗄 때" 발사 여부를 정한다: 제자리에서 짧게 톡 친 것만 발사다.
+    // 브라우저가 스크롤 등으로 제스처를 가져간 경우(pointercancel)는 발사하지 않는다.
+    if (e.type !== 'pointerup') return;
+    if (isTap(this.touchStart.maxMove, performance.now() - this.touchStart.time)) this.engine.launch();
   };
 
   /**
@@ -192,10 +212,17 @@ export class InputManager {
   private onPointerDown = (e: PointerEvent): void => {
     // 마우스는 주 버튼(왼쪽)만 발사로 친다. 우클릭/휠클릭이 공을 쏴 버리면 안 된다.
     if (e.pointerType === 'mouse' && e.button !== 0) return;
-    if (e.pointerType !== 'mouse') this.activeTouchId = e.pointerId;
     this.options.onUserGesture?.();
     if (!this.ignoresPointerPosition(e)) this.engine.setPointer(this.toLogicalX(e.clientX));
-    this.engine.launch();
+
+    if (e.pointerType === 'mouse') {
+      this.engine.launch();
+      return;
+    }
+    // 터치/펜은 대는 순간 쏘지 않는다. 그러면 패들 위치를 잡으려고 손을 대기만 해도 공이 나가서
+    // 조준이라는 게 성립하지 않는다. 드래그는 이동, 탭만 발사 — 판정은 onPointerEnd 에서.
+    this.activeTouchId = e.pointerId;
+    this.touchStart = { x: e.clientX, y: e.clientY, time: performance.now(), maxMove: 0 };
   };
 
   /** 게임 화면 위에 브라우저 컨텍스트 메뉴가 뜨지 않게 한다 (트랙패드 두 손가락 클릭 등). */

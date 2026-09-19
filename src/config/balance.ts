@@ -28,6 +28,16 @@ export const BALANCE = {
     maxDevicePixelRatio: 2,
   },
 
+  /** 입력 판별 */
+  input: {
+    /**
+     * 터치/펜에서 "탭"으로 인정하는 한계. 손가락을 댔다 떼는 동안 이보다 많이 움직였거나 오래 눌렀으면
+     * 패들을 옮기던 드래그(또는 그냥 쥐고 있던 것)로 보고 발사하지 않는다.
+     */
+    tapMaxMovePx: 12,
+    tapMaxMs: 500,
+  },
+
   paddle: {
     /** 유물 보정 전 기본 너비 */
     baseWidth: 130,
