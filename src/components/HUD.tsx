@@ -210,7 +210,8 @@ export function HUD({
         </div>
         {settings.controlMode === 'keyboard' && (
           <p className="mt-2 text-[11px] leading-relaxed text-slate-500">
-            마우스를 움직여도 패들이 따라가지 않습니다. A/D 또는 ←/→ 로 조작하세요.
+            마우스를 움직여도 패들이 따라가지 않습니다. A/D 또는 ←/→ 로 조작하세요. 터치 드래그는
+            이 설정과 상관없이 항상 동작합니다.
           </p>
         )}
       </section>

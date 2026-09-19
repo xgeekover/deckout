@@ -95,6 +95,8 @@ export class InputManager {
   private options: InputOptions;
   private pressed = new Set<string>();
   private attached = false;
+  /** 캔버스에서 시작해 아직 떼지 않은 터치/펜의 pointerId */
+  private activeTouchId: number | null = null;
 
   constructor(canvas: HTMLCanvasElement, engine: InputEngine, options: InputOptions) {
     this.canvas = canvas;
@@ -107,8 +109,11 @@ export class InputManager {
     this.attached = true;
     // 포인터 이동은 캔버스가 아니라 창 전체에서 듣는다 (아래 onPointerMove 주석 참고).
     window.addEventListener('pointermove', this.onPointerMove);
-    document.documentElement.addEventListener('pointerleave', this.onPointerMove);
+    window.addEventListener('pointerup', this.onPointerEnd);
+    window.addEventListener('pointercancel', this.onPointerEnd);
+    document.documentElement.addEventListener('pointerleave', this.onPointerExitWindow);
     this.canvas.addEventListener('pointerdown', this.onPointerDown);
+    this.canvas.addEventListener('contextmenu', this.onContextMenu);
     window.addEventListener('keydown', this.onKeyDown);
     window.addEventListener('keyup', this.onKeyUp);
     window.addEventListener('blur', this.onBlur);
@@ -118,8 +123,12 @@ export class InputManager {
     if (!this.attached) return;
     this.attached = false;
     window.removeEventListener('pointermove', this.onPointerMove);
-    document.documentElement.removeEventListener('pointerleave', this.onPointerMove);
+    window.removeEventListener('pointerup', this.onPointerEnd);
+    window.removeEventListener('pointercancel', this.onPointerEnd);
+    document.documentElement.removeEventListener('pointerleave', this.onPointerExitWindow);
     this.canvas.removeEventListener('pointerdown', this.onPointerDown);
+    this.activeTouchId = null;
+    this.canvas.removeEventListener('contextmenu', this.onContextMenu);
     window.removeEventListener('keydown', this.onKeyDown);
     window.removeEventListener('keyup', this.onKeyUp);
     window.removeEventListener('blur', this.onBlur);
@@ -151,14 +160,47 @@ export class InputManager {
    * 범위를 벗어난 x 는 벽으로 붙으므로 어떤 속도로 휘둘러도 패들은 끝까지 간다.
    */
   private onPointerMove = (e: PointerEvent): void => {
-    if (this.options.getControlMode() === 'keyboard') return;
+    // 터치/펜은 "캔버스에서 시작한 드래그"만 따라간다. 창 전체에서 받다 보니, HUD 를 스크롤하려고
+    // 댄 손가락까지 패들을 끌고 다니게 된다 (좁은 화면에서는 HUD 가 캔버스 아래에 길게 이어진다).
+    if (e.pointerType !== 'mouse' && e.pointerId !== this.activeTouchId) return;
+    if (this.ignoresPointerPosition(e)) return;
     this.engine.setPointer(this.toLogicalX(e.clientX));
   };
 
+  /**
+   * 마우스가 창 밖으로 나가는 순간. 나간 지점의 x 가 곧 "어느 쪽 벽으로 가던 중이었나"다.
+   * 터치에는 쓰지 않는다 — 손가락은 창을 "벗어나며 계속 움직일" 수 없고, 터치 종료 때 오는
+   * pointerleave 는 좌표가 (0,0) 으로 올 수 있어 패들을 엉뚱하게 왼쪽 벽으로 보낸다.
+   */
+  private onPointerExitWindow = (e: PointerEvent): void => {
+    if (e.pointerType === 'mouse') this.onPointerMove(e);
+  };
+
+  private onPointerEnd = (e: PointerEvent): void => {
+    if (e.pointerId === this.activeTouchId) this.activeTouchId = null;
+  };
+
+  /**
+   * '키보드' 모드가 막으려는 것은 "책상 위에 가만히 둔 마우스가 패들을 끌어가는 것"뿐이다.
+   * 터치와 펜은 언제나 의도적인 조작이므로 모드와 상관없이 받는다 — 그러지 않으면 키보드가 없는
+   * 폰에서 '키보드'를 한 번 탭하는 순간 패들을 움직일 방법이 아예 사라진다(새로고침해도 유지된다).
+   */
+  private ignoresPointerPosition(e: PointerEvent): boolean {
+    return this.options.getControlMode() === 'keyboard' && e.pointerType === 'mouse';
+  }
+
   private onPointerDown = (e: PointerEvent): void => {
+    // 마우스는 주 버튼(왼쪽)만 발사로 친다. 우클릭/휠클릭이 공을 쏴 버리면 안 된다.
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    if (e.pointerType !== 'mouse') this.activeTouchId = e.pointerId;
     this.options.onUserGesture?.();
-    if (this.options.getControlMode() !== 'keyboard') this.engine.setPointer(this.toLogicalX(e.clientX));
+    if (!this.ignoresPointerPosition(e)) this.engine.setPointer(this.toLogicalX(e.clientX));
     this.engine.launch();
+  };
+
+  /** 게임 화면 위에 브라우저 컨텍스트 메뉴가 뜨지 않게 한다 (트랙패드 두 손가락 클릭 등). */
+  private onContextMenu = (e: Event): void => {
+    e.preventDefault();
   };
 
   private syncDirection(): void {
