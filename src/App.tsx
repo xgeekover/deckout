@@ -9,6 +9,7 @@ import type { GameEngine } from './engine/GameEngine';
 import { createInitialGameState } from './types/game';
 import type { GameState, RunSummary } from './types/game';
 import {
+  RECORDS_KEY,
   addBricksDestroyed,
   loadRecords,
   loadSettings,
@@ -41,6 +42,16 @@ export default function App() {
   useEffect(() => {
     saveSettings(settings);
   }, [settings]);
+
+  // 다른 탭에서 기록이 바뀌면 이 탭의 HUD 도 따라간다. (storage 이벤트는 "다른" 탭의 쓰기에만 온다.)
+  // 저장 자체는 submitRun 이 매번 저장소를 다시 읽고 쓰므로 탭마다 상태가 낡아도 기록이 깨지지 않는다.
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === null || e.key === RECORDS_KEY) setRecords(loadRecords());
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, []);
 
   // 음소거는 설정(state)이 진실이고, 사운드 객체는 그걸 따라간다.
   useEffect(() => {

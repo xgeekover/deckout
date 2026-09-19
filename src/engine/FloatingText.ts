@@ -30,6 +30,8 @@ export class FloatingText {
   kind: FloatingKind;
   life: number;
   maxLife: number;
+  /** 스케일 1 기준 글자 폭. 글자와 폰트가 수명 내내 같으므로 처음 그릴 때 한 번만 잰다. */
+  private textWidth: number | null = null;
 
   constructor(
     x: number,
@@ -88,7 +90,10 @@ export class FloatingText {
     ctx.font = `${this.kind === 'damage' ? 700 : 800} ${this.size}px ui-sans-serif, system-ui, sans-serif`;
 
     // 실제 그려질 폭(팝 스케일 포함)의 절반만큼 양쪽 벽에서 떨어뜨린다.
-    const halfWidth = (ctx.measureText(this.text).width * pop) / 2 + EDGE_MARGIN;
+    // measureText 는 텍스트 레이아웃을 돌리는 비싼 호출이다. 연쇄 폭발에서는 텍스트 수십~백여 개가
+    // 매 프레임 그려지므로, 프레임마다 재면 그 순간의 렌더 비용에서 가장 큰 조각이 된다.
+    if (this.textWidth === null) this.textWidth = ctx.measureText(this.text).width;
+    const halfWidth = (this.textWidth * pop) / 2 + EDGE_MARGIN;
     const x = halfWidth * 2 >= fieldWidth ? fieldWidth / 2 : clampTo(this.x, halfWidth, fieldWidth - halfWidth);
     const y = Math.max(this.y, (this.size * pop) / 2 + EDGE_MARGIN);
 

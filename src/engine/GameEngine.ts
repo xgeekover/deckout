@@ -507,7 +507,9 @@ export class GameEngine {
       const cells = this.spawnRow(y, (col) => {
         if (!pattern.has(row, col, rows, cols)) return { hp: 0 };
         const hp = waveCellHp(wave, row) + (pattern.hpBonus?.(row, col, rows, cols) ?? 0);
-        return this.rollCell(hp, 0);
+        // 신규 행(beginTurnResolution)과 같은 기준으로 굴린다. 예전에는 0 으로 고정되어 있어서
+        // 몇 턴째든 웨이브 시작 배치의 폭탄 확률이 항상 최저(5%)였다.
+        return this.rollCell(hp, this.state.turn.currentTurn);
       });
       for (const brick of cells) this.bricks.push(brick);
     }
