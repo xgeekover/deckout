@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { BALL_STATS } from '../types/game';
 import type { BallType, DeckCard, RunSummary } from '../types/game';
 import type { RecordUpdate } from '../utils/storage';
+import { useActivationGrace } from './useActivationGrace';
 
 interface GameOverModalProps {
   summary: RunSummary;
@@ -78,6 +79,8 @@ function StatTile({ label, value, highlight }: { label: string; value: string; h
 /** 게임 오버 / 승리 결과창. 통계 · 최종 덱 · 유물 · 최고 기록 갱신 여부를 보여준다. */
 export function GameOverModal({ summary, update, onRestart }: GameOverModalProps) {
   const restartRef = useRef<HTMLButtonElement>(null);
+  // 버튼에 자동 포커스를 주기 때문에, 발사하려던 Space 연타가 결과창을 보기도 전에 재시작시킬 수 있다.
+  const isArmed = useActivationGrace(600);
   const victory = summary.outcome === 'victory';
   const newScore = update?.isNewHighScore ?? false;
   const newWave = update?.isNewMaxWave ?? false;
@@ -93,7 +96,7 @@ export function GameOverModal({ summary, update, onRestart }: GameOverModalProps
       role="dialog"
       aria-modal="true"
       aria-label={victory ? '승리 결과' : '게임 오버 결과'}
-      className="modal-in absolute inset-0 z-10 flex items-center justify-center overflow-y-auto rounded-2xl bg-deck-bg/85 backdrop-blur-sm"
+      className="modal-in fixed inset-0 z-30 flex items-start justify-center overflow-y-auto overscroll-contain bg-deck-bg/92 backdrop-blur-sm sm:items-center lg:absolute lg:z-10 lg:rounded-2xl lg:bg-deck-bg/85"
     >
       {anyRecord && <Fireworks />}
 
@@ -185,7 +188,9 @@ export function GameOverModal({ summary, update, onRestart }: GameOverModalProps
         <button
           ref={restartRef}
           type="button"
-          onClick={onRestart}
+          onClick={() => {
+            if (isArmed()) onRestart();
+          }}
           className="mt-6 rounded-xl border border-deck-accent bg-deck-accent/10 px-7 py-2.5 text-sm font-semibold text-deck-accent transition hover:bg-deck-accent hover:text-deck-bg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-deck-accent"
         >
           다시 도전 <span className="ml-1 text-xs font-normal opacity-70">(Press R or Click)</span>

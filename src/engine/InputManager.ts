@@ -105,8 +105,9 @@ export class InputManager {
   attach(): void {
     if (this.attached) return;
     this.attached = true;
-    this.canvas.addEventListener('pointermove', this.onPointerMove);
-    this.canvas.addEventListener('pointerleave', this.onPointerLeave);
+    // 포인터 이동은 캔버스가 아니라 창 전체에서 듣는다 (아래 onPointerMove 주석 참고).
+    window.addEventListener('pointermove', this.onPointerMove);
+    document.documentElement.addEventListener('pointerleave', this.onPointerMove);
     this.canvas.addEventListener('pointerdown', this.onPointerDown);
     window.addEventListener('keydown', this.onKeyDown);
     window.addEventListener('keyup', this.onKeyUp);
@@ -116,8 +117,8 @@ export class InputManager {
   detach(): void {
     if (!this.attached) return;
     this.attached = false;
-    this.canvas.removeEventListener('pointermove', this.onPointerMove);
-    this.canvas.removeEventListener('pointerleave', this.onPointerLeave);
+    window.removeEventListener('pointermove', this.onPointerMove);
+    document.documentElement.removeEventListener('pointerleave', this.onPointerMove);
     this.canvas.removeEventListener('pointerdown', this.onPointerDown);
     window.removeEventListener('keydown', this.onKeyDown);
     window.removeEventListener('keyup', this.onKeyUp);
@@ -133,19 +134,25 @@ export class InputManager {
 
   /* ---------------------------------------------------------------- */
 
+  /** 화면 x 를 필드의 논리 x 로. 캔버스 밖이면 가까운 쪽 벽으로 붙인다. */
   private toLogicalX(clientX: number): number | null {
     const rect = this.canvas.getBoundingClientRect();
     if (rect.width === 0) return null;
-    return ((clientX - rect.left) / rect.width) * GAME_WIDTH;
+    const x = ((clientX - rect.left) / rect.width) * GAME_WIDTH;
+    return Math.min(Math.max(x, 0), GAME_WIDTH);
   }
 
+  /**
+   * 창 전체의 pointermove 와, 포인터가 창을 벗어나는 순간(documentElement pointerleave)을 함께 받는다.
+   *
+   * 예전에는 캔버스에서만 듣고 캔버스를 벗어나면 추종 목표를 null 로 만들었다. 그러면 공을 살리려고
+   * 벽 쪽으로 빠르게 휘두른 마우스가 캔버스를 벗어나는 순간 패들이 보간 도중에 멈춰,
+   * 벽에서 70~140px(패들 폭 이상) 모자란 채 굳었다. 이제 캔버스 밖에서도 x 를 계속 따라가고,
+   * 범위를 벗어난 x 는 벽으로 붙으므로 어떤 속도로 휘둘러도 패들은 끝까지 간다.
+   */
   private onPointerMove = (e: PointerEvent): void => {
     if (this.options.getControlMode() === 'keyboard') return;
     this.engine.setPointer(this.toLogicalX(e.clientX));
-  };
-
-  private onPointerLeave = (): void => {
-    this.engine.setPointer(null);
   };
 
   private onPointerDown = (e: PointerEvent): void => {

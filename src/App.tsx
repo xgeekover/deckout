@@ -116,6 +116,9 @@ export default function App() {
   }, [sound]);
 
   const isOver = state.phase === 'GAME_OVER' || state.phase === 'VICTORY';
+  // 모달은 aria-modal 을 선언한다 — 그 약속대로 뒤의 HUD 를 실제로 비활성화해야
+  // Tab 이나 클릭이 모달 뒤의 "새 게임" 같은 버튼에 닿지 않는다.
+  const modalOpen = state.phase === 'REWARD' || (isOver && runEnd !== null);
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-6 p-4 lg:flex-row lg:items-start lg:p-8">
@@ -133,6 +136,8 @@ export default function App() {
             <RewardModal
               wave={state.wave}
               choices={state.rewardChoices}
+              deck={state.deck}
+              relics={state.relics}
               onChoose={handleChooseReward}
               onSkip={handleSkipReward}
             />
@@ -153,6 +158,7 @@ export default function App() {
         onToggleMute={handleToggleMute}
         onControlModeChange={handleControlModeChange}
         onRestart={handleRestart}
+        inert={modalOpen}
       />
     </main>
   );

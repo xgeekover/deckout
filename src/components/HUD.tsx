@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { BALL_STATS } from '../types/game';
 import type { BallType, DeckCard, GameState, Rarity, Relic } from '../types/game';
 import type { ControlMode, Records, Settings } from '../utils/storage';
@@ -9,6 +10,8 @@ interface HUDProps {
   onToggleMute: () => void;
   onControlModeChange: (mode: ControlMode) => void;
   onRestart: () => void;
+  /** 모달이 떠 있는 동안 HUD 전체를 비활성화한다 (포커스·클릭 모두 차단) */
+  inert?: boolean;
 }
 
 const PHASE_LABEL: Record<GameState['phase'], string> = {
@@ -57,6 +60,7 @@ export function HUD({
   onToggleMute,
   onControlModeChange,
   onRestart,
+  inert = false,
 }: HUDProps) {
   const current = state.currentCard;
   // 분모는 영구 덱 장수가 아니라 "지금 순환 중인 카드 전체"다.
@@ -64,7 +68,10 @@ export function HUD({
   const cycleTotal = state.drawPileCount + state.discardPileCount + (current ? 1 : 0);
 
   return (
-    <aside className="flex w-full flex-col gap-4 lg:w-72">
+    <aside
+      inert={inert}
+      className={`flex w-full flex-col gap-4 transition-opacity lg:w-72 ${inert ? 'opacity-60' : ''}`}
+    >
       <header className="rounded-xl border border-deck-edge bg-deck-panel/60 p-4">
         <div className="flex items-baseline justify-between">
           <h1 className="text-xl font-bold tracking-tight text-deck-accent">DECKOUT</h1>
@@ -208,16 +215,7 @@ export function HUD({
         )}
       </section>
 
-      <button
-        type="button"
-        onClick={(e) => {
-          onRestart();
-          e.currentTarget.blur();
-        }}
-        className="rounded-xl border border-deck-edge bg-deck-panel/60 px-4 py-2 text-sm text-slate-300 transition hover:border-deck-accent hover:text-deck-accent"
-      >
-        새 게임
-      </button>
+      <RestartButton state={state} onRestart={onRestart} />
     </aside>
   );
 }
@@ -359,6 +357,53 @@ function DeadlineMeter({ turns }: { turns: number }) {
         </p>
       )}
     </section>
+  );
+}
+
+/** 이 시간 안에 한 번 더 눌러야 재시작이 확정된다 */
+const RESTART_CONFIRM_MS = 3000;
+
+/**
+ * "새 게임" 버튼. 잃을 게 있는 판이면 한 번 더 눌러야 확정된다.
+ *
+ * 예전에는 한 번 누르면(또는 Tab 으로 와서 Enter 한 번이면) 진행 중인 판이 확인 없이 사라졌다.
+ * 끝난 판이거나 아직 아무것도 안 한 새 판이면 바로 재시작한다.
+ */
+function RestartButton({ state, onRestart }: { state: GameState; onRestart: () => void }) {
+  const [confirming, setConfirming] = useState(false);
+
+  const isOver = state.phase === 'GAME_OVER' || state.phase === 'VICTORY';
+  const hasProgress = state.score > 0 || state.wave > 1 || state.turn.currentTurn > 1;
+  const needsConfirm = !isOver && hasProgress;
+
+  useEffect(() => {
+    if (!confirming) return;
+    const timer = window.setTimeout(() => setConfirming(false), RESTART_CONFIRM_MS);
+    return () => window.clearTimeout(timer);
+  }, [confirming]);
+
+  return (
+    <button
+      type="button"
+      data-testid="restart-button"
+      data-confirming={confirming}
+      onClick={(e) => {
+        e.currentTarget.blur(); // 포커스가 남으면 Space 가 발사 대신 이 버튼을 누른다
+        if (needsConfirm && !confirming) {
+          setConfirming(true);
+          return;
+        }
+        setConfirming(false);
+        onRestart();
+      }}
+      className={`rounded-xl border px-4 py-2 text-sm transition ${
+        confirming
+          ? 'border-rose-500/80 bg-rose-500/10 text-rose-300'
+          : 'border-deck-edge bg-deck-panel/60 text-slate-300 hover:border-deck-accent hover:text-deck-accent'
+      }`}
+    >
+      {confirming ? '진행 중인 판을 버립니다 — 한 번 더 누르면 확정' : '새 게임'}
+    </button>
   );
 }
 
