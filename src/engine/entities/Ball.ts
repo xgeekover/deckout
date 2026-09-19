@@ -22,6 +22,8 @@ export class Ball {
   alive = true;
   /** 이번 낙하에서 유물(안전망 등)에게 이미 구조 기회를 줬는가 */
   fallChecked = false;
+  /** 아직 분열하지 않은 분열 구체인가. 분신은 다시 갈라지지 않는다. */
+  canSplit: boolean;
 
   /** 최근 HISTORY_LENGTH 프레임의 위치 큐 (오래된 것이 앞) */
   readonly history: Vec2[] = [];
@@ -37,6 +39,22 @@ export class Ball {
     this.damage = stats.damage;
     this.pierce = stats.pierce;
     this.baseSpeed = stats.speed;
+    this.canSplit = (stats.splitCount ?? 0) > 0;
+  }
+
+  /**
+   * 지금 이 공과 같은 상태(위치·속력·대미지)의 분신을 만든다. 속도 방향은 호출자가 정한다.
+   * 방금 때린 벽돌의 쿨다운도 물려준다 — 안 그러면 같은 자리에서 태어난 분신이 그 벽돌을 또 때린다.
+   */
+  spawnChild(velocity: Vec2): Ball {
+    const child = new Ball(this.x, this.y, this.type);
+    child.damage = this.damage;
+    child.baseSpeed = this.baseSpeed;
+    child.launched = true;
+    child.canSplit = false;
+    child.setVelocity(velocity);
+    for (const [id, remaining] of this.hitCooldowns) child.hitCooldowns.set(id, remaining);
+    return child;
   }
 
   get circle(): Circle {

@@ -31,6 +31,7 @@ import {
   resolveAABBBounce,
   resolveCircleVsRects,
   resolveWalls,
+  rotate,
   withSpeed,
 } from './Physics';
 import type { Rect } from './Physics';
@@ -99,6 +100,8 @@ export interface EngineHooks {
   onBrickDestroyed?: (brick: BrickModel) => void;
   /** 폭발이 일어날 때마다 (연쇄면 여러 번) */
   onExplosion?: () => void;
+  /** 분열 구체가 갈라졌을 때. count 는 새로 생긴 분신 수 */
+  onBallSplit?: (count: number) => void;
   /** 공이 바닥을 완전히 벗어났을 때 */
   onBallLost?: (turn: number) => void;
   /** 턴 정산(벽돌 하강 + 신규 행 스폰)이 끝났을 때 */
@@ -183,6 +186,8 @@ export class GameEngine {
 
   private paddle: Paddle;
   private balls: Ball[] = [];
+  /** 이번 서브스텝에 태어난 분신. balls 를 순회하는 도중에 직접 넣지 않고 끝난 뒤에 합친다. */
+  private pendingBalls: Ball[] = [];
   private bricks: Brick[] = [];
   /** this.bricks 와 인덱스가 1:1 인 충돌용 rect 캐시 (서브스텝마다 재생성하지 않기 위함) */
   private brickRects: Rect[] = [];
@@ -427,6 +432,7 @@ export class GameEngine {
     this.drawPile = [];
     this.discardPile = [];
     this.cardInPlay = null;
+    this.pendingBalls = [];
     this.relics = [];
     this.relicCharges.clear();
     this.modifiers = resolveModifiers([]);
@@ -704,11 +710,13 @@ export class GameEngine {
    * 보상 3장을 추첨해 상태와 onWaveClear 훅으로 내보낸다.
    */
   private clearWave(): void {
+    // 분열로 공이 여럿이어도 하나만 남겨 패들에 고정하고 나머지(방금 태어난 분신 포함)는 치운다.
     const ball = this.balls[0];
     if (ball) {
       ball.attachTo(this.paddle.x, this.paddle.y);
       this.balls = [ball];
     }
+    this.pendingBalls = [];
     this.discardCardInPlay();
     this.forEachRelic((relic) => relic.onTurnEnd?.(this.relicCtx));
 
@@ -969,6 +977,10 @@ export class GameEngine {
       this.collidePaddle(ball);
       this.collideBricks(ball);
 
+      // 이 공이 마지막 벽돌을 깼다면 clearWave() 가 this.balls 를 갈아 끼웠다. 지금 돌고 있는 것은
+      // 옛 배열이므로, 남은 공들을 더 굴리면 끝난 웨이브에서 소리와 파티클만 낸다.
+      if (this.state.phase !== 'PLAYING') break;
+
       // 바닥에 닿는 순간 유물에게 한 번 기회를 준다 (비상 안전망).
       if (ball.vy > 0 && !ball.fallChecked && ball.y + ball.radius >= FIELD.y + FIELD.h) {
         ball.fallChecked = true;
@@ -981,6 +993,12 @@ export class GameEngine {
         this.particles.ballLost(ball.x, GAME_HEIGHT - 4);
         this.shake.shake(...SHAKE.ballLost);
       }
+    }
+
+    // 이번 서브스텝에 갈라져 나온 분신을 합류시킨다 (순회가 끝난 뒤에).
+    if (this.pendingBalls.length > 0) {
+      if (this.state.phase === 'PLAYING') this.balls.push(...this.pendingBalls);
+      this.pendingBalls = [];
     }
 
     // 스톨 워치독: 어떤 이유로든 턴이 끝나지 않으면 강제로 정산한다.
@@ -1017,7 +1035,10 @@ export class GameEngine {
     const hit = resolveAABBBounce(ball.circle, ball.velocity, rect) ?? this.forgivePaddleMiss(ball, rect);
     if (!hit) return;
 
-    ball.x = hit.position.x;
+    // 패들 옆면에 맞은 공은 패들 바깥쪽으로 스냅되는데, 패들이 벽에 붙어 있으면 그 자리가 벽 너머다
+    // (패들 왼쪽 끝 5px − 반지름 8px = −3px). 그대로 두면 다음 스텝에 벽이 안으로, 패들이 다시 밖으로
+    // 밀면서 공이 필드 밖을 드나든다. 벽 안쪽으로 가둔다.
+    ball.x = clamp(hit.position.x, FIELD.x + ball.radius, FIELD.x + FIELD.w - ball.radius);
     ball.y = hit.position.y;
 
     if (hit.face === 'top') {
@@ -1080,6 +1101,7 @@ export class GameEngine {
     const stats = BALL_STATS[ball.type];
     const comboBefore = this.combo;
     const anchor = resolved.contacts[0].result.collision.contact;
+    let directHit = false;
 
     for (const { index, result } of resolved.contacts) {
       const brick = this.bricks[index];
@@ -1088,6 +1110,7 @@ export class GameEngine {
       if (!ball.canHit(brick.id)) continue;
 
       ball.markHit(brick.id);
+      directHit = true;
       const destroyed = this.damageBrick(
         brick,
         ball.damage,
@@ -1118,17 +1141,46 @@ export class GameEngine {
     }
 
     // 관통 구체는 벽돌을 뚫고 지나가므로 위치 보정/반사를 하지 않는다.
-    if (ball.pierce) return;
+    if (!ball.pierce) {
+      // resolved 는 피해를 주기 "전" 기하로 계산한 값이다. 그 사이 폭발이 그 벽돌들을
+      // 날려버렸을 수 있으므로, 살아남은 벽돌로 반사를 다시 계산한다.
+      // 그러지 않으면 이미 사라진 벽돌에 튕기는 유령 반사가 생긴다.
+      // (null 이면 부딪힐 것이 남지 않은 것 — 그대로 지나간다.)
+      const bounce = resolveCircleVsRects(ball.circle, ball.velocity, this.brickRects);
+      if (bounce) {
+        ball.x = bounce.position.x;
+        ball.y = bounce.position.y;
+        ball.setVelocity(ensureMinVerticalSpeed(withSpeed(bounce.velocity, ball.baseSpeed)));
+      }
+    }
 
-    // resolved 는 피해를 주기 "전" 기하로 계산한 값이다. 그 사이 폭발이 그 벽돌들을
-    // 날려버렸을 수 있으므로, 살아남은 벽돌로 반사를 다시 계산한다.
-    // 그러지 않으면 이미 사라진 벽돌에 튕기는 유령 반사가 생긴다.
-    const bounce = resolveCircleVsRects(ball.circle, ball.velocity, this.brickRects);
-    if (!bounce) return; // 부딪힐 것이 남지 않았다 — 그대로 지나간다
+    // 분열은 반사까지 끝난 "튕겨 나가는 방향"을 기준으로 한다.
+    if (directHit && ball.canSplit) this.splitBall(ball);
+  }
 
-    ball.x = bounce.position.x;
-    ball.y = bounce.position.y;
-    ball.setVelocity(ensureMinVerticalSpeed(withSpeed(bounce.velocity, ball.baseSpeed)));
+  /**
+   * 분열 구체를 갈라놓는다. 본체는 그대로 가고, 분신들이 좌우로 번갈아 벌어진다 (+θ, −θ, +2θ …).
+   * 분신은 다시 갈라지지 않으므로 공의 수가 기하급수로 불지 않는다.
+   */
+  private splitBall(ball: Ball): void {
+    ball.canSplit = false;
+    const stats = BALL_STATS[ball.type];
+    const count = stats.splitCount ?? 0;
+    const spread = ((stats.splitAngleDeg ?? 25) * Math.PI) / 180;
+
+    let spawned = 0;
+    for (let i = 0; i < count; i++) {
+      if (this.balls.length + this.pendingBalls.length >= BALANCE.ball.maxBalls) break;
+      const angle = (i % 2 === 0 ? 1 : -1) * (Math.floor(i / 2) + 1) * spread;
+      const velocity = ensureMinVerticalSpeed(withSpeed(rotate(ball.velocity, angle), ball.baseSpeed));
+      this.pendingBalls.push(ball.spawnChild(velocity));
+      spawned++;
+    }
+    if (spawned === 0) return;
+
+    this.particles.emit(ball.x, ball.y, 14, stats.trail, { speed: 190, life: 0.4, gravity: 0, drag: 2.2 });
+    this.floating.spawnNotice(ball.x, ball.y - 26, 'SPLIT!', stats.trail);
+    this.hooks.onBallSplit?.(spawned);
   }
 
   /* ---------------------------------------------------------------- */

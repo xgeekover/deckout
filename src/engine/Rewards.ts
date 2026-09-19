@@ -7,12 +7,13 @@ import { RELIC_CATALOG } from './Relics.ts';
 import { BALL_CARD_DATA } from '../types/game.ts';
 import type { BallType, Rarity, RewardItem } from '../types/game.ts';
 
-/** 보상으로 나오는 볼과 그 등급 (split 은 미구현이라 제외) */
+/** 보상으로 나오는 볼과 그 등급 */
 const BALL_REWARDS: Array<{ ballType: BallType; rarity: Rarity }> = [
   { ballType: 'normal', rarity: 'COMMON' },
   { ballType: 'heavy', rarity: 'COMMON' },
   { ballType: 'pierce', rarity: 'RARE' },
   { ballType: 'bomb', rarity: 'RARE' },
+  { ballType: 'split', rarity: 'RARE' },
 ];
 
 /** 유니언의 각 멤버에 따로 Omit 을 적용한다 (그냥 Omit 은 공통 키만 남긴다) */

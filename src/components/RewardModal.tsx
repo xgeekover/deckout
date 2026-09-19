@@ -80,6 +80,7 @@ function BallStatLine({ type, mods }: { type: BallType; mods: ResolvedModifiers 
       <b className={speed !== stats.speed ? boosted : 'font-normal'}>{speed}</b>
       {stats.pierce ? ' · 관통' : ''}
       {stats.explosionRadius ? ' · 폭발' : ''}
+      {stats.splitCount ? ` · ${stats.splitCount + 1}분열` : ''}
     </>
   );
 }

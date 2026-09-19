@@ -70,6 +70,8 @@ export const BALANCE = {
      * 절반을 넘지 않아야 이산 충돌 판정이 공을 놓치지 않는다 — validateBalance() 가 검사한다.
      */
     maxSpeed: 720,
+    /** 한 턴에 동시에 존재할 수 있는 공의 상한 (분열이 겹쳐도 폭주하지 않게) */
+    maxBalls: 12,
     /** 속력 대비 최소 수직 성분 비율 — 좌우로만 튀는 교착 방지 */
     minVerticalRatio: 0.22,
     /** 속력 대비 최소 수평 성분 비율 — 패들 정중앙 수직 무한 랠리 방지 */
@@ -82,7 +84,8 @@ export const BALANCE = {
       heavy: { radius: 12, speed: 390, damage: 3, pierce: false },
       pierce: { radius: 7, speed: 540, damage: 1, pierce: true },
       bomb: { radius: 11, speed: 420, damage: 1, pierce: false, explosionRadius: 74, explosionDamage: 2 },
-      split: { radius: 8, speed: 470, damage: 1, pierce: false },
+      /** 첫 벽돌에 맞는 순간 splitCount 개의 분신이 좌우 splitAngleDeg 간격으로 갈라져 나온다 */
+      split: { radius: 8, speed: 470, damage: 1, pierce: false, splitCount: 2, splitAngleDeg: 28 },
     },
   },
 

@@ -63,6 +63,13 @@ export function normalize(v: Vec2): Vec2 {
 
 export const scale = (v: Vec2, s: number): Vec2 => ({ x: v.x * s, y: v.y * s });
 
+/** v 를 angleRad 만큼 회전 (화면 좌표계 — y 가 아래라 양수 각은 시계 방향으로 보인다) */
+export function rotate(v: Vec2, angleRad: number): Vec2 {
+  const cos = Math.cos(angleRad);
+  const sin = Math.sin(angleRad);
+  return { x: v.x * cos - v.y * sin, y: v.x * sin + v.y * cos };
+}
+
 /** 입사 벡터 v 를 단위 법선 n 에 대해 반사: v - 2(v·n)n */
 export function reflect(v: Vec2, n: Vec2): Vec2 {
   const d = 2 * dot(v, n);

@@ -18,7 +18,7 @@ export const GAME_HEIGHT = BALANCE.field.height;
 /* Ball                                                                */
 /* ------------------------------------------------------------------ */
 
-/** 덱에 들어갈 수 있는 공의 종류. split 은 타입만 정의돼 있고 미구현. */
+/** 덱에 들어갈 수 있는 공의 종류 */
 export type BallType = 'normal' | 'heavy' | 'pierce' | 'bomb' | 'split';
 
 export interface BallStats {
@@ -36,6 +36,10 @@ export interface BallStats {
   /** 0보다 크면 벽돌을 부술 때마다 이 반경으로 폭발한다 */
   explosionRadius?: number;
   explosionDamage?: number;
+  /** 0보다 크면 첫 벽돌 타격 때 이 수만큼 분신이 갈라져 나온다 */
+  splitCount?: number;
+  /** 분신들이 벌어지는 각도 간격(도) */
+  splitAngleDeg?: number;
 }
 
 export const BALL_STATS: Record<BallType, BallStats> = {
@@ -99,7 +103,7 @@ export const BALL_CARD_DATA: Record<BallType, BallData> = {
   heavy: { ballType: 'heavy', name: '중량 구체', description: '느리지만 벽돌을 3 만큼 부순다.' },
   pierce: { ballType: 'pierce', name: '관통 구체', description: '벽돌을 뚫고 지나간다. 한 줄을 통째로.' },
   bomb: { ballType: 'bomb', name: '폭탄 구체', description: '부순 자리에서 폭발해 주변까지 쓸어버린다.' },
-  split: { ballType: 'split', name: '분열 구체', description: '(미구현)' },
+  split: { ballType: 'split', name: '분열 구체', description: '첫 벽돌에 맞는 순간 셋으로 갈라진다.' },
 };
 
 export type Rarity = 'COMMON' | 'RARE' | 'LEGENDARY';
