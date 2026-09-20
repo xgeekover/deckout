@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { LANGUAGES, LANGUAGE_NAMES, patternName, relicText } from '../i18n/strings';
 import type { Language } from '../i18n/strings';
 import { useStrings } from '../i18n/useStrings';
+import { ITEMS } from '../engine/Items';
+import type { ItemId } from '../engine/Items';
 import { BALL_STATS } from '../types/game';
 import type { BallType, DeckCard, GameState, Rarity, Relic } from '../types/game';
 import type { ControlMode, Records, Settings } from '../utils/storage';
@@ -113,6 +115,25 @@ export function HUD({
       </section>
 
       <RelicBar relics={state.relics} charges={state.relicCharges} />
+
+      <section className="rounded-xl border border-deck-edge bg-deck-panel/60 p-4" data-testid="hud-items">
+        <span className="text-xs uppercase tracking-wider text-slate-400">{t.itemsTitle}</span>
+        {state.turnEffects.length === 0 ? (
+          <p className="mt-2 text-xs leading-relaxed text-slate-500">{t.itemsEmpty}</p>
+        ) : (
+          <ul className="mt-2 flex flex-col gap-1.5">
+            {state.turnEffects.map((id, i) => {
+              const def = ITEMS[id as ItemId];
+              return (
+                <li key={`${id}-${i}`} className="flex items-baseline gap-2 text-xs">
+                  <b className={def?.good === false ? 'text-rose-400' : 'text-emerald-300'}>{t.items[id]?.name ?? id}</b>
+                  <span className="text-slate-400">{t.items[id]?.description}</span>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </section>
 
       <section className="grid grid-cols-2 gap-3">
         <Stat label={t.hud.discarded} value={state.discardPileCount} />

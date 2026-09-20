@@ -14,6 +14,8 @@ export type SoundName =
   | 'ballLost'
   | 'waveClear'
   | 'rewardPick'
+  | 'itemGood'
+  | 'itemBad'
   | 'gameOver'
   | 'victory'
   | 'newRecord';
@@ -42,6 +44,13 @@ const TONES: Record<Exclude<SoundName, 'explosion'>, Tone[]> = {
     { type: 'triangle', from: 784, to: 784, duration: 0.2, gain: 0.45, delay: 0.2 },
   ],
   rewardPick: [{ type: 'sine', from: 700, to: 1050, duration: 0.14, gain: 0.4 }],
+  // 좋은 아이템: 짧게 두 번 올라가는 삑삑
+  itemGood: [
+    { type: 'triangle', from: 880, to: 1320, duration: 0.09, gain: 0.35 },
+    { type: 'triangle', from: 1100, to: 1760, duration: 0.12, gain: 0.35, delay: 0.09 },
+  ],
+  // 나쁜 아이템: 아래로 미끄러지는 둔탁한 톱니
+  itemBad: [{ type: 'sawtooth', from: 300, to: 90, duration: 0.28, gain: 0.4 }],
   gameOver: [
     { type: 'sawtooth', from: 392, to: 370, duration: 0.22, gain: 0.35 },
     { type: 'sawtooth', from: 311, to: 294, duration: 0.22, gain: 0.35, delay: 0.2 },

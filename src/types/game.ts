@@ -199,6 +199,8 @@ export interface Brick {
   maxHp: number;
   isDestroyed: boolean;
   type: BrickType;
+  /** 숨어 있는 아이템 (engine/Items.ts 의 ItemId). 없으면 null */
+  item?: string | null;
 }
 
 /** 그리드 배치 파라미터 (논리 좌표계 기준) */
@@ -281,6 +283,8 @@ export interface GameState {
    * 벽돌이 없으면 Infinity 대신 -1 로 둔다 (직렬화 안전).
    */
   turnsUntilDeadline: number;
+  /** 이번 턴에 받은 아이템 id (engine/Items.ts). 턴이 끝나면 비워진다 */
+  turnEffects: string[];
 }
 
 export const createInitialGameState = (): GameState => ({
@@ -303,6 +307,7 @@ export const createInitialGameState = (): GameState => ({
   bestCombo: 0,
   rewardChoices: [],
   turnsUntilDeadline: -1,
+  turnEffects: [],
 });
 
 /* ------------------------------------------------------------------ */

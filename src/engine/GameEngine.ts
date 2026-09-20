@@ -22,6 +22,8 @@ import { ParticleSystem } from './ParticleSystem';
 import { resolveModifiers } from './Relics';
 import type { ResolvedModifiers } from './Relics';
 import { rollRewards } from './Rewards';
+import { Drop, ITEMS, freshTurnEffects, rollItem } from './Items';
+import type { ItemDef, TurnEffects } from './Items';
 import { ScreenShake } from './ScreenShake';
 import { FULL, patternForWave, waveCellHp } from './WavePatterns';
 import type { WavePattern } from './WavePatterns';
@@ -105,6 +107,8 @@ export interface EngineHooks {
   onExplosion?: () => void;
   /** 분열 구체가 갈라졌을 때. count 는 새로 생긴 분신 수 */
   onBallSplit?: (count: number) => void;
+  /** 떨어지는 아이템을 패들로 받았을 때 (좋은 것이든 나쁜 것이든) */
+  onItemCaught?: (item: ItemDef) => void;
   /** 공이 바닥을 완전히 벗어났을 때 */
   onBallLost?: (turn: number) => void;
   /** 턴 정산(벽돌 하강 + 신규 행 스폰)이 끝났을 때 */
@@ -194,6 +198,10 @@ export class GameEngine {
   private bricks: Brick[] = [];
   /** this.bricks 와 인덱스가 1:1 인 충돌용 rect 캐시 (서브스텝마다 재생성하지 않기 위함) */
   private brickRects: Rect[] = [];
+  /** 지금 떨어지고 있는 아이템 캡슐들 */
+  private drops: Drop[] = [];
+  /** 이번 턴에 받은 아이템 효과. 공을 전부 잃으면 초기화된다 */
+  private turnEffects: TurnEffects = freshTurnEffects();
   private particles = new ParticleSystem();
   private floating = new FloatingTextSystem(GAME_WIDTH);
   private shake = new ScreenShake();
@@ -462,6 +470,8 @@ export class GameEngine {
     this.balls = [];
     this.bricks = [];
     this.brickRects = [];
+    this.drops = [];
+    this.turnEffects = freshTurnEffects();
     this.state = { ...createInitialGameState(), deck: this.deck };
     this.aimAngle = -Math.PI / 2;
     this.slideElapsed = 0;
@@ -579,7 +589,10 @@ export class GameEngine {
     for (let col = 0; col < cols; col++) {
       const { hp, type } = cellFor(col);
       if (hp <= 0) continue; // 빈 칸
-      row.push(new Brick(originX + col * (brickWidth + gap), y, brickWidth, height, hp, type));
+      const brick = new Brick(originX + col * (brickWidth + gap), y, brickWidth, height, hp, type);
+      // 폭탄 벽돌은 기폭 장치라 아이템을 숨기지 않는다
+      if (!brick.isBomb) brick.item = rollItem();
+      row.push(brick);
     }
     return row;
   }
@@ -653,6 +666,8 @@ export class GameEngine {
 
   /** 공이 바닥을 완전히 벗어났을 때 호출된다. */
   private onBallLost(): void {
+    // 공을 전부 잃으면 이번 턴의 아이템 효과와 떨어지던 캡슐은 사라진다
+    this.resetTurnEffects();
     this.discardCardInPlay();
     this.forEachRelic((relic) => relic.onTurnEnd?.(this.relicCtx));
     this.patchState({ combo: 0, discardPileCount: this.discardPile.length });
@@ -762,6 +777,7 @@ export class GameEngine {
       this.balls = [ball];
     }
     this.pendingBalls = [];
+    this.resetTurnEffects();
     this.discardCardInPlay();
     this.forEachRelic((relic) => relic.onTurnEnd?.(this.relicCtx));
 
@@ -851,7 +867,7 @@ export class GameEngine {
   /** 상시 보정치를 다시 계산해 패들 등에 반영한다. 볼 보정은 다음 공 생성 시 적용된다. */
   private applyModifiers(): void {
     this.modifiers = resolveModifiers(this.relics);
-    this.paddle.width = BASE_PADDLE_WIDTH * this.modifiers.paddleWidthMul;
+    this.paddle.width = BASE_PADDLE_WIDTH * this.modifiers.paddleWidthMul * this.turnEffects.paddleMul;
     // 넓어진 패들이 벽 밖으로 삐져나가지 않게 위치를 다시 가둔다.
     const half = this.paddle.width / 2;
     this.paddle.x = clamp(this.paddle.x, FIELD.x + half, FIELD.x + FIELD.w - half);
@@ -874,14 +890,148 @@ export class GameEngine {
 
   /** 바닥에 닿은 공을 살려낼 유물이 있는가 (렌더에서 안전망을 그릴지 판단) */
   private hasFallGuard(): boolean {
+    if (this.turnEffects.shield > 0) return true;
     return this.relics.some(
       (r) => r.onBallFall && (!r.chargesPerWave || (this.relicCharges.get(r.id) ?? 0) > 0),
     );
   }
 
   /** 바닥에 닿은 공을 유물로 구해낸다. 구했으면 true. */
+  /* ---------------------------------------------------------------- */
+  /* 아이템 드롭 (턴 한정 효과)                                          */
+  /* ---------------------------------------------------------------- */
+
+  private updateDrops(dt: number): void {
+    if (this.drops.length === 0) return;
+    const paddle = this.paddle.rect;
+    // 받기 판정은 패들보다 살짝 너그럽게 (위로 8px) — 캡슐이 패들 윗면을 스치는 프레임을 놓치지 않게
+    const catchZone = { x: paddle.x, y: paddle.y - 8, w: paddle.w, h: paddle.h + 8 };
+    for (const drop of this.drops) {
+      drop.step(dt);
+      if (Drop.overlaps(drop.rect, catchZone)) {
+        drop.alive = false;
+        this.applyItem(drop.item);
+      } else if (drop.y > GAME_HEIGHT + BALANCE.items.height) {
+        drop.alive = false;
+      }
+    }
+    this.drops = this.drops.filter((d) => d.alive);
+  }
+
+  /** 아이템 효과를 이번 턴에 적용한다. 활성 공에는 즉시, 이후 갈라지는 분신은 부모를 따른다. */
+  private applyItem(item: ItemDef): void {
+    const fx = this.turnEffects;
+    const cfg = BALANCE.items;
+    switch (item.id) {
+      case 'wide':
+        fx.paddleMul = Math.min(cfg.paddleMulMax, fx.paddleMul * cfg.wideMul);
+        this.applyModifiers();
+        break;
+      case 'narrow':
+        fx.paddleMul = Math.max(cfg.paddleMulMin, fx.paddleMul * cfg.narrowMul);
+        this.applyModifiers();
+        break;
+      case 'slow':
+      case 'fast':
+        fx.speedMul = clamp(fx.speedMul * (item.id === 'slow' ? cfg.slowMul : cfg.fastMul), cfg.speedMulMin, cfg.speedMulMax);
+        for (const ball of this.balls) {
+          ball.baseSpeed = clampBallSpeed(BALL_STATS[ball.type].speed * this.modifiers.ballSpeedMul * fx.speedMul);
+          if (ball.launched) ball.setVelocity(withSpeed(ball.velocity, ball.baseSpeed));
+        }
+        break;
+      case 'power':
+        fx.damageAdd += cfg.powerAdd;
+        for (const ball of this.balls) ball.damage += cfg.powerAdd;
+        break;
+      case 'shield':
+        fx.shield += cfg.shieldCharges;
+        break;
+      case 'multi': {
+        // 지금 날아가는 공마다 분신 둘 (상한 안에서)
+        const spread = (BALANCE.ball.stats.split.splitAngleDeg * Math.PI) / 180;
+        let spawned = 0;
+        for (const ball of this.balls.filter((b) => b.launched)) {
+          for (let i = 0; i < cfg.multiCount; i++) {
+            if (this.balls.length + this.pendingBalls.length >= BALANCE.ball.maxBalls) break;
+            const angle = (i % 2 === 0 ? 1 : -1) * (Math.floor(i / 2) + 1) * spread;
+            this.pendingBalls.push(ball.spawnChild(ensureMinVerticalSpeed(withSpeed(rotate(ball.velocity, angle), ball.baseSpeed))));
+            spawned++;
+          }
+        }
+        if (spawned > 0) this.hooks.onBallSplit?.(spawned);
+        break;
+      }
+      case 'advance': {
+        // 벽돌이 지금 당장 한 줄 내려온다. 그 한 줄로 데드라인에 닿는다면 굳이 즉사시키진 않는다 (무효).
+        const pitch = rowPitch(this.grid);
+        const lowest = this.bricks.reduce((m, b) => (b.isDestroyed ? m : Math.max(m, b.y + b.height)), 0);
+        if (lowest + pitch < DEADLINE_Y) {
+          for (const brick of this.bricks) brick.moveBy(pitch);
+          this.brickRects = this.bricks.map((b) => b.rect);
+          this.patchState({ turnsUntilDeadline: this.computeTurnsUntilDeadline() });
+        }
+        break;
+      }
+    }
+    fx.caught = [...fx.caught, item.id];
+    this.patchState({ turnEffects: fx.caught });
+    const label = item.good ? `+ ${item.label}` : `!! ${item.label}`;
+    this.floating.spawnNotice(this.paddle.x, this.paddle.y - 40, label, item.color);
+    this.particles.emit(this.paddle.x, this.paddle.y, item.good ? 18 : 10, item.color, { speed: 220, spread: Math.PI, direction: -Math.PI / 2, life: 0.45, gravity: 160, drag: 2 });
+    this.shake.shake(...SHAKE.paddle);
+    this.hooks.onItemCaught?.(item);
+  }
+
+  private resetTurnEffects(): void {
+    const had = this.turnEffects.caught.length > 0 || this.drops.length > 0;
+    this.turnEffects = freshTurnEffects();
+    this.drops = [];
+    if (!had) return;
+    this.applyModifiers();
+    this.patchState({ turnEffects: [] });
+  }
+
+  /** 개발용: 패들 위에 아이템 캡슐을 하나 떨어뜨린다 (검증 스크립트가 쓴다) */
+  debugDrop(id: keyof typeof ITEMS): void {
+    if (this.state.phase !== 'PLAYING') return;
+    this.drops.push(new Drop(this.paddle.x, this.paddle.y - 120, ITEMS[id]));
+  }
+
+  private drawDrops(ctx: CanvasRenderingContext2D): void {
+    if (this.drops.length === 0) return;
+    const { width, height } = BALANCE.items;
+    ctx.save();
+    ctx.font = '800 10px ui-sans-serif, system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    for (const drop of this.drops) {
+      const r = drop.rect;
+      ctx.shadowColor = drop.item.color;
+      ctx.shadowBlur = 14;
+      ctx.fillStyle = drop.item.good ? drop.item.color : '#3a0d1a';
+      ctx.beginPath();
+      ctx.roundRect(r.x, r.y, width, height, height / 2);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = drop.item.good ? 'rgba(255,255,255,0.7)' : drop.item.color;
+      ctx.stroke();
+      ctx.fillStyle = drop.item.good ? '#0a1020' : drop.item.color;
+      ctx.fillText(drop.item.label, drop.x, drop.y + 0.5);
+    }
+    ctx.restore();
+  }
+
   private tryRescueBall(ball: Ball): boolean {
-    const rescued = this.relics.some((relic) => relic.onBallFall?.(this.relicCtx) === true);
+    // 이번 턴의 보호막(SHIELD 아이템)이 먼저, 그 다음 유물(안전망)
+    let rescued = false;
+    if (this.turnEffects.shield > 0) {
+      this.turnEffects.shield -= 1;
+      this.floating.spawnNotice(ball.x, FIELD.y + FIELD.h - 30, 'SHIELD!', ITEMS.shield.color);
+      rescued = true;
+    } else {
+      rescued = this.relics.some((relic) => relic.onBallFall?.(this.relicCtx) === true);
+    }
     if (!rescued) return false;
 
     // 되튕긴 공은 올라가는 길에 패들을 "통과"한다 (collidePaddle 은 상승 중인 공을 무시).
@@ -1057,6 +1207,9 @@ export class GameEngine {
         for (const ball of this.balls) ball.alive = false;
       }
     }
+
+    // 떨어지는 아이템: 패들에 닿으면 적용, 바닥을 지나면 사라진다
+    if (this.state.phase === 'PLAYING') this.updateDrops(dt);
 
     const before = this.balls.length;
     this.balls = this.balls.filter((b) => b.alive);
@@ -1255,6 +1408,8 @@ export class GameEngine {
       this.bricksDestroyed += 1;
       this.scoreBuffer += BALANCE.score.perBrickHp * brick.maxHp;
       this.particles.debris(center.x, center.y, brick.tier.edge);
+      // 숨어 있던 아이템이 떨어진다 (폭발로 깨져도)
+      if (brick.item) this.drops.push(new Drop(center.x, center.y, ITEMS[brick.item]));
       this.shake.shake(...SHAKE.brickDestroy);
       this.requestHitStop(HITSTOP.brickDestroy);
       const model = brick.toModel();
@@ -1372,6 +1527,7 @@ export class GameEngine {
     this.drawDeadline(ctx);
     this.drawSafetyNet(ctx);
     for (const brick of this.bricks) brick.draw(ctx);
+    this.drawDrops(ctx);
     this.paddle.draw(ctx);
     for (const ball of this.balls) ball.draw(ctx);
     this.particles.draw(ctx);

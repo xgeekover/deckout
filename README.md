@@ -19,6 +19,7 @@ No install. Works on desktop (mouse · keyboard) and on phones (touch). Records 
 - **Turn-based Breakout** — draw a card from your deck and fire that kind of ball. Lose the ball and the turn ends: every brick drops one row and a new row slides in from the top. If a brick reaches the warning line (the deadline), you lose.
 - **Deckbuilding** — clear a wave to pick one of three rewards. Grow your deck with new ball cards (Basic · Heavy · Pierce · Bomb · Split) or take a passive relic.
 - **4 relics** — 🏓 Wide Paddle · 🔥 Flame Trail · 🕸️ Safety Net · ♻️ Scrap Cycle.
+- **Items hidden in bricks** — some bricks drop a capsule when they break; catch it with the paddle and it applies on the spot. Five good (WIDE · x3 · SLOW · PWR · SHIELD), three bad (NARROW · FAST · DOWN). Everything lasts only until you lose the ball.
 - **6 wave patterns** — Standard · Checkerboard · Inverted Triangle · Shield Wall · Diamond · Columns. HP and the share of tough bricks rise with each wave.
 - **Game feel** — particles, screen shake, hit-stop, ball trails, combo popups, chained bomb explosions, synthesized WebAudio sound effects.
 - **Arcade cabinet layout** — the playfield fills the window on every screen size; the score line runs along the top (SCORE · HI · WAVE · COMBO · DEADLINE) and the status line along the bottom (current card · relics · a blinking PRESS SPACE prompt), in pixel fonts, with optional CRT scanlines. Deck, records and settings sit behind `☰`.
@@ -87,6 +88,21 @@ Combo rises with every brick hit, **is not broken by paddle bounces**, and reset
 
 Color follows **current HP**, stepping down with each hit (red 5+ → orange 4 → pink 3 → purple 2 → blue 1). Bricks with 2+ HP also show the number and a health bar along the bottom. A **bomb brick**, with its blinking fuse, explodes when destroyed (radius 96, damage 2) and chains into other bomb bricks.
 
+### Items (drops)
+
+About 12% of new bricks hide an item (never bomb bricks). When such a brick breaks — by a ball or an explosion — a capsule falls at 190px/s, swaying, and disappears past the floor. Catching it with the paddle applies it immediately; the effect and any capsules still falling vanish the moment you lose all balls, so a good item is only as good as the rally you keep going. 30% of items are bad, drawn in dark red, so a falling capsule is a decision, not a reflex.
+
+| Capsule | Effect this turn | |
+|---|---|---|
+| WIDE | Paddle ×1.5 (stacks up to ×2.2) | good |
+| x3 | Every ball in flight splits into three (ball cap 12) | good |
+| SLOW | Balls ×0.75 speed | good |
+| PWR | Balls +1 damage (children inherit) | good |
+| SHIELD | A floor barrier bounces one falling ball back up (before the Safety Net relic) | good |
+| NARROW | Paddle ×0.6 | bad |
+| FAST | Balls ×1.3 speed | bad |
+| DOWN | The bricks drop one row right now — unless that would touch the deadline, in which case nothing happens | bad |
+
 ### Relics and reward odds
 
 | Relic | Rarity | Effect |
@@ -137,6 +153,7 @@ App / HUD / RewardModal    GameEngine (rAF, fixed timestep 1/120s)
 | `src/engine/ParticleSystem.ts` | `Particle` class + fixed pool, spark/debris/explosion presets |
 | `src/engine/FloatingText.ts` | Floating damage numbers · BOOM! · combo popups (capped at 140 at once) |
 | `src/engine/Relics.ts` | Catalog of 4 passive relics + summing of always-on modifiers |
+| `src/engine/Items.ts` | Brick items: catalog, drop roll, falling capsule, per-turn effects |
 | `src/engine/Rewards.ts` | Three-card wave clear reward roll (rarity weights, one relic guaranteed) |
 | `src/engine/WavePatterns.ts` | 6 per-wave layout patterns + HP scaling |
 | `src/engine/ScreenShake.ts` | Intensity/duration screen shake (pure logic, no dependencies) |

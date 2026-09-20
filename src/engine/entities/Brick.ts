@@ -1,4 +1,5 @@
 import type { Brick as BrickModel, BrickType } from '../../types/game';
+import type { ItemId } from '../Items';
 import type { Rect } from '../Physics';
 
 interface Tier {
@@ -36,6 +37,8 @@ export const classifyBrick = (maxHp: number): BrickType =>
 let brickSeq = 0;
 
 export class Brick implements BrickModel {
+  /** 숨어 있는 아이템. 깨지면 떨어진다 */
+  item: ItemId | null;
   readonly id: number;
   x: number;
   y: number;
@@ -67,6 +70,7 @@ export class Brick implements BrickModel {
     this.hp = hp;
     this.maxHp = hp;
     this.type = type ?? classifyBrick(hp);
+    this.item = null;
     // 슬라이드를 한 번도 하지 않은 벽돌도 settledY 가 현재 위치를 가리켜야 한다.
     this.slideFromY = y;
     this.slideToY = y;
@@ -100,6 +104,7 @@ export class Brick implements BrickModel {
       maxHp: this.maxHp,
       isDestroyed: this.isDestroyed,
       type: this.type,
+      item: this.item,
     };
   }
 
@@ -121,6 +126,13 @@ export class Brick implements BrickModel {
   }
 
   /** dy 만큼 내려가는 슬라이드를 준비한다. */
+  /** 즉시 이동 — 슬라이드 없이 자리를 옮기고 정착 위치도 함께 갱신한다 (DOWN 아이템) */
+  moveBy(dy: number): void {
+    this.y += dy;
+    this.slideFromY = this.y;
+    this.slideToY = this.y;
+  }
+
   beginSlide(dy: number): void {
     this.slideFromY = this.y;
     this.slideToY = this.y + dy;

@@ -150,6 +150,31 @@ export const BALANCE = {
     mid: { chanceBase: 0.24, chanceRamp: 0.0, hp: 2, hpRamp: 1.5 },
   },
 
+  /** 벽돌 속 아이템 (드롭). 효과는 이번 턴만 간다 */
+  items: {
+    /** 새 벽돌 하나가 아이템을 숨기고 있을 확률 (폭탄 벽돌은 제외) */
+    dropChance: 0.12,
+    /** 아이템 중 나쁜 것의 비율 */
+    badChance: 0.3,
+    /** 낙하 속도 px/s */
+    fallSpeed: 190,
+    width: 60,
+    height: 22,
+    wideMul: 1.5,
+    narrowMul: 0.6,
+    slowMul: 0.75,
+    fastMul: 1.3,
+    /** x3: 공 하나당 갈라져 나오는 분신 수 */
+    multiCount: 2,
+    powerAdd: 1,
+    shieldCharges: 1,
+    /** 아이템이 겹쳐도 패들 폭 배율은 이 범위 안 */
+    paddleMulMin: 0.5,
+    paddleMulMax: 2.2,
+    /** 공 속도 배율 범위 (clampBallSpeed 와 별도로) */
+    speedMulMin: 0.5,
+    speedMulMax: 1.8,
+  },
   turn: {
     /** 데드라인(경고선)은 패들 윗면에서 이만큼 위 */
     deadlineOffset: 40,

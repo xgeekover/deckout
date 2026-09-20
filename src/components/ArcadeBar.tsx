@@ -1,4 +1,6 @@
 import { patternName, relicText } from '../i18n/strings';
+import { ITEMS } from '../engine/Items';
+import type { ItemId } from '../engine/Items';
 import type { Strings } from '../i18n/strings';
 import { useStrings } from '../i18n/useStrings';
 import { BALL_STATS } from '../types/game';
@@ -140,6 +142,27 @@ function StatusFields({ state, compact = false }: { state: GameState; compact?: 
           </span>
         )}
       </span>
+      {/* 이번 턴에 받은 아이템 — 좋은 건 초록, 나쁜 건 빨강. 턴이 끝나면 사라진다 */}
+      {state.turnEffects.length > 0 && (
+        <span className="flex gap-1" data-testid="turn-effects" aria-label={t.itemsTitle}>
+          {state.turnEffects.map((id, i) => {
+            const def = ITEMS[id as ItemId];
+            const label = t.items[id]?.name ?? def?.label ?? id;
+            return (
+              <span
+                key={`${id}-${i}`}
+                data-item={id}
+                title={t.items[id]?.description}
+                className={`animate-[combo-pop_260ms_ease-out] rounded border px-1 leading-tight ${
+                  def?.good === false ? 'border-rose-500/80 text-rose-400' : 'border-emerald-400/80 text-emerald-300'
+                }`}
+              >
+                {label}
+              </span>
+            );
+          })}
+        </span>
+      )}
       {state.relics.length > 0 && (
         <span className="flex gap-1 font-sans text-sm leading-none" aria-label={t.arcade.relicsAria}>
           {state.relics.map((relic, i) => (

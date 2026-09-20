@@ -115,6 +115,7 @@ export default function App() {
         onBrickDestroyed: () => sound.play('brickDestroy'),
         onExplosion: () => sound.play('explosion'),
         onBallSplit: () => sound.play('rewardPick'),
+        onItemCaught: (item) => sound.play(item.good ? 'itemGood' : 'itemBad'),
         onBallLost: () => sound.play('ballLost'),
         onWaveClear: () => sound.play('waveClear'),
         onRewardResolved: (picked) => {

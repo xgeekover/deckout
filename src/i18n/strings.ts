@@ -39,6 +39,10 @@ export interface Strings {
 
   balls: Record<BallType, NameAndDescription>;
   relics: Record<RelicId, NameAndDescription>;
+  /** 벽돌 속 아이템 (턴 한정 효과) — id 는 engine/Items.ts */
+  items: Record<string, NameAndDescription>;
+  itemsTitle: string;
+  itemsEmpty: string;
   patterns: Record<PatternId, string>;
 
   common: {
@@ -222,6 +226,18 @@ const en: Strings = {
       description: `Reach a ${R.scrapCycleCombo}-hit combo in one turn to add a Bomb Ball to your discard pile. (It vanishes when the wave ends.)`,
     },
   },
+  items: {
+    wide: { name: 'Wide', description: 'Paddle 1.5× wider this turn.' },
+    multi: { name: 'x3', description: 'Every ball splits into three.' },
+    slow: { name: 'Slow', description: 'Balls move 25% slower this turn.' },
+    power: { name: 'Power', description: 'Balls deal +1 damage this turn.' },
+    shield: { name: 'Shield', description: 'A floor barrier bounces one falling ball back up.' },
+    narrow: { name: 'Narrow', description: 'Bad — paddle shrinks to 60% this turn.' },
+    fast: { name: 'Fast', description: 'Bad — balls move 30% faster this turn.' },
+    advance: { name: 'Down', description: 'Bad — the bricks drop one row right now.' },
+  },
+  itemsTitle: 'Items this turn',
+  itemsEmpty: 'Bricks hide items — catch the falling capsules with the paddle. Effects last until you lose the ball. Red ones are bad.',
   patterns: {
     full: 'Standard',
     checker: 'Checkerboard',
@@ -405,6 +421,18 @@ const ko: Strings = {
       description: `한 턴에 콤보 ${R.scrapCycleCombo}를 달성하면 버린 카드 더미에 폭탄 구체 1장을 만든다. (웨이브 종료 시 소멸)`,
     },
   },
+  items: {
+    wide: { name: '넓은 패들', description: '이번 턴 동안 패들이 1.5배 넓어진다.' },
+    multi: { name: '×3', description: '모든 공이 셋으로 갈라진다.' },
+    slow: { name: '느리게', description: '이번 턴 동안 공이 25% 느려진다.' },
+    power: { name: '파워', description: '이번 턴 동안 공의 대미지 +1.' },
+    shield: { name: '보호막', description: '바닥 보호막이 떨어지는 공을 한 번 튕겨 올린다.' },
+    narrow: { name: '좁은 패들', description: '나쁨 — 이번 턴 동안 패들이 60% 로 줄어든다.' },
+    fast: { name: '빠르게', description: '나쁨 — 이번 턴 동안 공이 30% 빨라진다.' },
+    advance: { name: '하강', description: '나쁨 — 벽돌이 지금 당장 한 줄 내려온다.' },
+  },
+  itemsTitle: '이번 턴 아이템',
+  itemsEmpty: '벽돌 속에 아이템이 숨어 있다 — 떨어지는 캡슐을 패들로 받는다. 효과는 공을 잃을 때까지. 빨간 것은 나쁘다.',
   patterns: {
     full: '기본 진형',
     checker: '체스판',
