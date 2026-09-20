@@ -533,7 +533,8 @@ export class GameEngine {
     if (this.pendingRewardBanner) {
       const { text, color } = this.pendingRewardBanner;
       this.pendingRewardBanner = null;
-      this.floating.spawnBanner(GAME_WIDTH / 2, this.paddle.y - 150, text, color);
+      // 위치: 처음 몇 턴의 조작 안내(캔버스 58% 높이)와 데드라인 사이 — 겹치지 않게 패들 위 120px
+      this.floating.spawnBanner(GAME_WIDTH / 2, this.paddle.y - 120, text, color);
     }
   }
 
