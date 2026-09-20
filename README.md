@@ -63,6 +63,41 @@ You can launch → pick rewards → retry entirely from the keyboard. The bottom
 
 Before launch the ball sits on the paddle, and **the aim line tilts in the direction you move the paddle** (up to ±36°).
 
+## How a run plays out
+
+A run is one attempt from wave 1 to wave 10 — about 15–20 minutes at a steady pace. There is no mid-run save: close the tab and the run is gone; only your records stay.
+
+**1. Start.** You begin with the starting deck — Basic Ball ×4, Heavy Ball ×1 — and wave 1's Standard layout: 40 bricks in five rows, the top two rows tougher (2 HP) than the bottom three (1 HP).
+
+**2. One turn.** At the start of every wave the deck is shuffled into a draw pile. Each turn:
+
+1. **Draw** — one card is drawn and that ball appears on the paddle. The status line shows the card; the `☰` panel shows what is left in the pile.
+2. **Aim and fire** — move the paddle and the aim line tilts with it (up to ±36°). Space / click / tap launches. Every launch is a free aimed shot, so use it on the brick you most need gone.
+3. **Rally** — keep the ball up. Every brick hit raises the combo, and paddle bounces do not break it. Bricks sometimes drop item capsules: catch a bright one (WIDE · x3 · SLOW · PWR · SHIELD) or steer clear of a dark red one (NARROW · FAST · DOWN). A Split or Chain ball, an x3 capsule or a bomb brick can turn one shot into a field-wide chain.
+4. **Ball lost** — once every ball has fallen past the paddle, the turn ends: the card goes to the discard pile, **every brick drops one row**, a new row slides in at the top (until the wave's reinforcement budget is spent), and turn items vanish. When the draw pile runs out, the discard pile is reshuffled into it.
+
+The `DEADLINE` number on the score line is how many more turns you have before the lowest brick reaches the warning line above the paddle — the one number to watch.
+
+**3. Wave clear → reward.** Destroy every brick and three cards appear: a new ball (joins the deck for good), a passive relic (works immediately), or skip. At least one ball and one relic are always on offer, and a relic you own never comes back. The next wave opens with a banner naming what you took (`+1 HEAVY BALL`, `🏓 WIDE PADDLE`).
+
+**4. Waves 2–4.** The layout rotates — Checkerboard → Inverted Triangle → Shield Wall — and the pressure rises a little every wave: all bricks gain HP, more of them are "tough" (+1), one more reinforcement row is budgeted, and from wave 4 the bricks start one row lower (one turn less of slack).
+
+**5. Wave 5 — boss.** A 33 HP core sits behind two turrets and a full guard wall, with its own health bar at the top. **Every ball you lose heals it by 2**, so half-finished rallies cost you. Get through the wall (Pierce, Bomb and Chain balls are the tools), then keep one long rally going on the core. The reward after a boss is RARE or better.
+
+**6. Waves 6–9.** Diamond → Columns → Checkerboard → Inverted Triangle, starting two rows lower from wave 7. By now you have taken five rewards — usually a deck of 7–10 cards and two or three relics — and runs are decided by whether that deck can clear a row faster than rows come down.
+
+**7. Wave 10 — final boss.** The core has 48 HP, every brick carries +6 HP, and the layout starts three rows lower: five turns of slack. Clear it and the run is a **victory**.
+
+**Losing.** A brick touching the deadline ends the run on any wave (Phoenix Feather buys one reprieve per run). The results screen shows the wave, score, best combo and bricks destroyed with your final deck and relics, updates your records (high score · best wave · total bricks), and `R` starts the next run.
+
+**Tips**
+
+- The brick that ends runs is rarely the top row — it is **one straggler drifting down alone**. Spend the launch on it.
+- Long rallies are the real damage: combos survive paddle bounces, Scrap Cycle pays at 5 and Overcharge at 8.
+- Do not stuff the deck. Unused cards pay 120 each at the clear, and a pile of Basic Balls dilutes your Bomb and Pierce draws — skipping a reward is a real choice.
+- Bad capsules are dodgeable: move the paddle out from under them.
+- Per-wave relics (Safety Net · Demolition Charge · Anchor) fire on their first chance each wave and their icons grey out in the `☰` panel once spent; Phoenix Feather works once per run.
+
 ## Rules
 
 **One turn = one card = one ball.**
