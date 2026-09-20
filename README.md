@@ -254,6 +254,10 @@ Relics act in two ways — **always-on modifiers** (`modifiers`) that apply simp
 
 The engine calls the spec's three hooks (`onPaddleHit` / `onBrickDestroy` / `onTurnEnd`) at the right moments, but none of the initial four relics fit them, so `onBallFall` and `onCombo` were added. Because an explosion can jump the combo from 3 to 9, Scrap Cycle asks not "did it reach 5?" but "did it **pass** 5?". The bomb it creates is a **temporary card** that disappears when the wave ends (so the permanent deck does not swell every turn).
 
+### Reward feedback
+
+A reward is applied the moment you pick it — a ball card joins the permanent deck (and is in the next wave's draw pile), a relic's modifiers take effect immediately — but that was easy to miss in play: the new card only shows up when the shuffle draws it, a wider paddle or a faster ball is subtle, and on a phone the deck and relics sit behind `☰`. So the next wave opens with a banner on the canvas — `+1 HEAVY BALL` in the ball's color, or `🏓 WIDE PADDLE` — and the newest relic icon pops on the status line. (Real-play feedback: "the items I got don't seem to apply.")
+
 ### Deck cycling
 
 Three piles: `deck` (permanent) / `drawPile` / `discardPile`. At the end of a turn the used card goes to the discard pile, and when the draw pile runs out the discard pile is reshuffled into it. The permanent deck is reshuffled at the start of each wave, so a ball chosen as a reward is **already in the next wave's draw pile**.

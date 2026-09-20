@@ -162,6 +162,11 @@ export class FloatingTextSystem {
     this.push(new FloatingText(x, y, text, color, 22, 'notice', 1.1));
   }
 
+  /** 웨이브 시작에 "이번에 얻은 것" 을 알리는 큰 배너 — 보상이 적용됐음을 눈에 보이게 */
+  spawnBanner(x: number, y: number, text: string, color = '#f7d558'): void {
+    this.push(new FloatingText(x, y, text, color, 34, 'notice', 1.8));
+  }
+
   update(dt: number): void {
     let write = 0;
     for (let i = 0; i < this.items.length; i++) {

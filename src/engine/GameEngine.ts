@@ -207,6 +207,8 @@ export class GameEngine {
   private combo = 0;
   /** 안전망 발동 직후 번쩍임 타이머(초) */
   private netFlash = 0;
+  /** 방금 고른 보상 — 다음 웨이브가 시작될 때 화면에 배너로 알린다 */
+  private pendingRewardBanner: { text: string; color: string } | null = null;
   /** 이번 판에서 파괴한 벽돌 수 */
   private bricksDestroyed = 0;
   /** 현재 웨이브가 시작된 턴 — 신규 행 난이도의 "이 웨이브를 얼마나 끌었나" 계산용 */
@@ -361,8 +363,11 @@ export class GameEngine {
 
     if (picked.type === 'BALL') {
       this.deck = [...this.deck, makeCard(picked.ball)];
+      // 캔버스 위 문구는 언어와 무관하게 영어 (데이터의 이름이 곧 영어 문구)
+      this.pendingRewardBanner = { text: `+1 ${picked.ball.name.toUpperCase()}`, color: BALL_STATS[picked.ball.ballType].color };
     } else {
       this.addRelic(picked.relic);
+      this.pendingRewardBanner = { text: `${picked.relic.icon} ${picked.relic.name.toUpperCase()}`, color: '#f7d558' };
     }
     this.hooks.onRewardResolved?.(picked);
     this.advanceWave();
@@ -470,6 +475,7 @@ export class GameEngine {
     this.stopDelay = 0;
     this.paused = false;
     this.netFlash = 0;
+    this.pendingRewardBanner = null;
     this.bricksDestroyed = 0;
     this.waveStartTurn = 1;
     this.combo = 0;
@@ -521,6 +527,14 @@ export class GameEngine {
       discardPileCount: 0,
     });
     this.beginTurn();
+
+    // 보상이 실제로 들어왔음을 보여준다. 볼 카드는 셔플된 덱에서 뽑혀야 비로소 보이고 유물 효과는 미묘해서,
+    // 알려주지 않으면 "적용이 안 된 것 같다" 고 느낀다 (실제 플레이 피드백).
+    if (this.pendingRewardBanner) {
+      const { text, color } = this.pendingRewardBanner;
+      this.pendingRewardBanner = null;
+      this.floating.spawnBanner(GAME_WIDTH / 2, this.paddle.y - 150, text, color);
+    }
   }
 
   /**

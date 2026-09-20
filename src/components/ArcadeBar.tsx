@@ -142,8 +142,9 @@ function StatusFields({ state, compact = false }: { state: GameState; compact?: 
       </span>
       {state.relics.length > 0 && (
         <span className="flex gap-1 font-sans text-sm leading-none" aria-label={t.arcade.relicsAria}>
-          {state.relics.map((relic) => (
-            <span key={relic.id} title={relicText(t, relic).name}>
+          {state.relics.map((relic, i) => (
+            // 마지막(방금 얻은) 유물은 마운트되며 팝 — 보상이 들어왔음이 하단 줄에서도 보이게
+            <span key={relic.id} title={relicText(t, relic).name} className={i === state.relics.length - 1 ? 'inline-block animate-[combo-pop_260ms_ease-out]' : ''}>
               {relic.icon}
             </span>
           ))}
