@@ -105,6 +105,11 @@ function ScoreFields({ state, records, compact }: { state: GameState; records: R
         value={state.turnsUntilDeadline < 0 ? '--' : String(state.turnsUntilDeadline)}
         tone={danger ? 'text-rose-400 arcade-blink' : 'text-slate-100'}
       />
+      {state.boss && (
+        <span data-testid="boss-hp">
+          <Field label={t.arcade.boss} value={`${state.boss.hp}/${state.boss.maxHp}`} tone="text-fuchsia-300" />
+        </span>
+      )}
       {!compact && (
         <Field
           label={t.arcade.incoming}

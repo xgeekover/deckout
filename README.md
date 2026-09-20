@@ -17,8 +17,9 @@ No install. Works on desktop (mouse · keyboard) and on phones (touch). Records 
 ## Features
 
 - **Turn-based Breakout** — draw a card from your deck and fire that kind of ball. Lose the ball and the turn ends: every brick drops one row and a new row slides in from the top. If a brick reaches the warning line (the deadline), you lose.
-- **Deckbuilding** — clear a wave to pick one of three rewards. Grow your deck with new ball cards (Basic · Heavy · Pierce · Bomb · Split) or take a passive relic.
-- **4 relics** — 🏓 Wide Paddle · 🔥 Flame Trail · 🕸️ Safety Net · ♻️ Scrap Cycle.
+- **Deckbuilding** — clear a wave to pick one of three rewards. Grow your deck with new ball cards (Basic · Heavy · Pierce · Bomb · Split · Giant · Chain · Bouncy) or take a passive relic.
+- **10 relics** — 🏓 Wide Paddle · 🍀 Lucky Charm · 🔩 Iron Core · 🔥 Flame Trail · 🕸️ Safety Net · 💥 Demolition Charge · ⚓ Anchor · 🔋 Overcharge · ♻️ Scrap Cycle · 🪶 Phoenix Feather.
+- **Boss waves** — on waves 5 and 10 a four-cell-wide core sits behind turrets and a guard wall, heals every time you lose a ball, and shows its own health bar. Beating it rolls rewards of RARE or better only.
 - **Items hidden in bricks** — some bricks drop a capsule when they break; catch it with the paddle and it applies on the spot. Five good (WIDE · x3 · SLOW · PWR · SHIELD), three bad (NARROW · FAST · DOWN). Everything lasts only until you lose the ball.
 - **6 wave patterns** — Standard · Checkerboard · Inverted Triangle · Shield Wall · Diamond · Columns. HP and the share of tough bricks rise with each wave.
 - **Game feel** — particles, screen shake, hit-stop, ball trails, combo popups, chained bomb explosions, synthesized WebAudio sound effects.
@@ -70,7 +71,7 @@ Before launch the ball sits on the paddle, and **the aim line tilts in the direc
 2. Each turn draws one card and puts that ball on the paddle. The aim line tilts with the paddle's movement; launching sends the ball into the field.
 3. When the ball (or, after a split, **every** ball) has fully left the bottom, the turn ends — the used card goes to the discard pile, and **every remaining brick drops one row while a new row enters at the top.** New rows arrive only up to a per-wave budget (the reinforcement budget: 5 rows on wave 1, +1 per wave); the descent continues after that. When the draw pile is empty the discard pile is reshuffled into it.
 4. If the bottom of a brick reaches the **deadline** (40px above the paddle), the game is over. From the starting layout, doing nothing gets you there in 8 turns.
-5. Destroy every brick on the field to clear the wave → choose one of three rewards (a ball or a relic; you may skip) → next wave. Clear wave 10 to win.
+5. Destroy every brick on the field to clear the wave → choose one of three rewards (a ball or a relic; you may skip) → next wave. Waves 5 and 10 are **boss waves**. Clear wave 10 to win.
 
 Combo rises with every brick hit, **is not broken by paddle bounces**, and resets to 0 only when you lose the ball. Score is brick max HP × 100, plus 500 per wave clear and 120 for each card left in the draw pile.
 
@@ -83,6 +84,9 @@ Combo rises with every brick hit, **is not broken by paddle bounces**, and reset
 | Pierce Ball | 7 | 540 | 1 | Passes through bricks (does not bounce off them) | RARE |
 | Bomb Ball | 11 | 420 | 1 | Every brick it destroys explodes: radius 74, damage 2 | RARE |
 | Split Ball | 8 | 470 | 1 | Splits into three on its first brick hit (±28° around the bounce direction). The copies do not split again | RARE |
+| Giant Ball | 16 | 430 | 2 | Its diameter (32) is far wider than the gap between bricks (8), so straddling two bricks hits both | COMMON |
+| Chain Ball | 8 | 460 | 1 | Every brick it destroys sends lightning to the 2 nearest bricks within 150px for 1 damage each. Lightning does not chain further | RARE |
+| Bouncy Ball | 8 | 500 | 1 | Once per turn, bounces back up from the floor by itself (before SHIELD and Safety Net) | RARE |
 
 ### Bricks
 
@@ -108,11 +112,23 @@ About 12% of new bricks hide an item (never bomb bricks). When such a brick brea
 | Relic | Rarity | Effect |
 |---|---|---|
 | 🏓 Wide Paddle | COMMON | Paddle width +20% |
+| 🍀 Lucky Charm | COMMON | Bricks hide items 50% more often (12% → 18%), and bad items are half as common (30% → 15%) |
+| 🔩 Iron Core | COMMON | Basic Balls deal +1 damage |
 | 🔥 Flame Trail | RARE | All balls +15% speed, +1 damage |
 | 🕸️ Safety Net | RARE | Once per wave, catches a ball falling off the bottom and bounces it back up |
+| 💥 Demolition Charge | RARE | Once per wave, the first brick you destroy explodes (radius 96, damage 2) |
+| ⚓ Anchor | RARE | Once per wave, losing a ball does not bring the bricks down, and no new row comes in |
+| 🔋 Overcharge | RARE | Passing an 8 combo in one turn gives every ball in flight +1 damage for the rest of the turn |
 | ♻️ Scrap Cycle | LEGENDARY | Reaching a 5 combo in one turn creates a Bomb Ball in the discard pile (gone when the wave ends) |
+| 🪶 Phoenix Feather | LEGENDARY | Once per run, when the bricks reach the deadline, the lowest 2 rows burn away instead and the run goes on |
 
-Rarity odds are COMMON 70% · RARE 25% · LEGENDARY 5%. Among the three cards at least one ball and one relic are guaranteed, and relics you already own never reappear.
+Rarity odds are COMMON 70% · RARE 25% · LEGENDARY 5%. Among the three cards at least one ball and one relic are guaranteed, and relics you already own never reappear. After a boss wave only RARE and LEGENDARY candidates are rolled.
+
+### Boss wave
+
+Every 5th wave (5 and 10) uses the boss layout: a **core** four cells wide and two rows tall in the top center, a turret (+2 HP) on each side of its lower row, a full guard row (+1 HP) under it, then a checkerboard. The core's HP is `18 + 3 × wave` (33 on wave 5, 48 on wave 10); it is drawn purple with a pulsing glow and a big number, and a health bar sits at the top of the playfield with a `BOSS` field on the score line. **Every time you lose a ball, the core heals 2** — a rally that stops short is partly undone, so the wave rewards finishing what you start. The core is an ordinary brick in every other respect: it descends with the rest, takes explosion and lightning damage, and reaching the deadline with it ends the run. It hides no item. Destroying it gives max HP × 100 points and, when it is the last brick, ends the wave with `CORE DOWN`.
+
+Bot measurement (same bots as in "Wave scaling"): for the average bot the boss wave's clear rate (57–77% across two batches) sits between wave 4 (43–75%) and wave 6 (100%), and for the expert bot it takes fewer turns (median 5.5) than waves 4 and 6 (9.5 / 8.5) — the layout has fewer cells than a normal wave, and the core is one big target. So the boss is a change of texture, not a difficulty cliff. `BALANCE.boss` holds all of it: `everyWaves` · `hpBase` · `hpPerWave` · `regenPerTurn` · the turret/guard bonuses · `rewardMinRarity`.
 
 ## Screenshots
 
@@ -152,10 +168,10 @@ App / HUD / RewardModal    GameEngine (rAF, fixed timestep 1/120s)
 | `src/engine/GameEngine.ts` | rAF loop, turn · wave · deck state machine, state emission |
 | `src/engine/ParticleSystem.ts` | `Particle` class + fixed pool, spark/debris/explosion presets |
 | `src/engine/FloatingText.ts` | Floating damage numbers · BOOM! · combo popups (capped at 140 at once) |
-| `src/engine/Relics.ts` | Catalog of 4 passive relics + summing of always-on modifiers |
+| `src/engine/Relics.ts` | Catalog of 10 passive relics + summing of always-on modifiers |
 | `src/engine/Items.ts` | Brick items: catalog, drop roll, falling capsule, per-turn effects |
 | `src/engine/Rewards.ts` | Three-card wave clear reward roll (rarity weights, one relic guaranteed) |
-| `src/engine/WavePatterns.ts` | 6 per-wave layout patterns + HP scaling |
+| `src/engine/WavePatterns.ts` | 7 per-wave layout patterns + HP scaling (incl. the boss layout with its multi-cell core) |
 | `src/engine/ScreenShake.ts` | Intensity/duration screen shake (pure logic, no dependencies) |
 | `src/engine/entities/*.ts` | Paddle / Ball / Brick |
 | `src/components/GameCanvas.tsx` | Canvas DOM binding, DPR resize, input → engine |
@@ -266,10 +282,16 @@ Relics act in two ways — **always-on modifiers** (`modifiers`) that apply simp
 |---|---|---|---|
 | 🏓 Wide Paddle | COMMON | Paddle width +20% | `modifiers.paddleWidthMul` — applied the moment you take it |
 | 🔥 Flame Trail | RARE | Ball speed +15%, damage +1 (+ ember trail) | `modifiers` — from the next ball created |
+| 🍀 Lucky Charm | COMMON | Item drop chance ×1.5, bad-item share ×0.5 | `modifiers.itemDropMul / itemBadMul` — read by `rollItem` for every new brick |
+| 🔩 Iron Core | COMMON | Basic Ball +1 damage | `modifiers.ballTypeDamageAdd` — per-type add, summed with `ballDamageAdd` when the ball is created |
+| 💥 Demolition Charge | RARE | First brick destroyed each wave explodes | `onBrickDestroy` + `chargesPerWave: 1` → `ctx.blast()` pushes onto the same queue as bomb bricks (chains included) |
+| ⚓ Anchor | RARE | Once per wave the bricks stay put after a lost ball | `onDescend` + `chargesPerWave: 1` — the turn resolves with no slide and no new row; the reinforcement budget is untouched |
+| 🔋 Overcharge | RARE | Passing an 8 combo gives all balls +1 damage for the turn | `onCombo` → `ctx.addTurnDamage()` — lands in the same turn effects as the PWR item, so it resets when the ball is lost |
+| 🪶 Phoenix Feather | LEGENDARY | Once per run, the lowest 2 rows burn instead of a game over | `onDeadline` + `chargesPerRun: 1` — checked in turn resolution before `GAME_OVER`; burned bricks give no score |
 | 🕸️ Safety Net | RARE | Prevents one fall per wave | `onBallFall` + `chargesPerWave: 1`. Recharged at wave start |
 | ♻️ Scrap Cycle | LEGENDARY | Reaching a 5 combo in one turn creates a Bomb Ball in the discard pile | `onCombo(before, after)` |
 
-The engine calls the spec's three hooks (`onPaddleHit` / `onBrickDestroy` / `onTurnEnd`) at the right moments, but none of the initial four relics fit them, so `onBallFall` and `onCombo` were added. Because an explosion can jump the combo from 3 to 9, Scrap Cycle asks not "did it reach 5?" but "did it **pass** 5?". The bomb it creates is a **temporary card** that disappears when the wave ends (so the permanent deck does not swell every turn).
+The engine calls the spec's three hooks (`onPaddleHit` / `onBrickDestroy` / `onTurnEnd`) at the right moments, but none of the initial four relics fit them, so `onBallFall` and `onCombo` were added; the second batch of relics added `onDescend` and `onDeadline`, plus `blast()` and `addTurnDamage()` on the context. `chargesPerRun` charges once, on pickup, and is never refilled. Because an explosion can jump the combo from 3 to 9, Scrap Cycle asks not "did it reach 5?" but "did it **pass** 5?". The bomb it creates is a **temporary card** that disappears when the wave ends (so the permanent deck does not swell every turn).
 
 ### Reward feedback
 
@@ -281,9 +303,11 @@ Three piles: `deck` (permanent) / `drawPile` / `discardPile`. At the end of a tu
 
 ### Wave scaling
 
-| Wave | 1 | 2 | 3 | 4 | 5 | 6 | 7… |
-|---|---|---|---|---|---|---|---|
-| Pattern | Standard (40) | Checkerboard (20) | Inverted Triangle (20) | Shield Wall (32) | Diamond (18) | Columns (20) | cycles from #2 |
+| Wave | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| Pattern | Standard (40) | Checkerboard (20) | Inverted Triangle (20) | Shield Wall (32) | **Boss** (21) | Diamond (18) | Columns (20) | Checkerboard | Inverted Triangle | **Boss** |
+
+Boss waves are every multiple of `BALANCE.boss.everyWaves` (5); the other five patterns cycle over the non-boss waves, so a boss does not shift the rotation.
 
 If `setGridConfig` makes the grid very small (say 2×2), a pattern like Diamond may fill no cells at all. A wave that starts with 0 bricks never reaches its "last brick destroyed" moment and would never end, so in that case the layout falls back to Standard.
 
@@ -325,7 +349,7 @@ A ball bounced back by the Safety Net **passes through the paddle** on its way u
 
 ### Dev handle
 
-Only in DEV builds, the engine is exposed as `window.__deckout` (confirmed that not even the string survives in the production bundle). `__deckout.debugClearBricks()` destroys every remaining brick **through the normal damage path**, reproducing the wave clear flow deterministically — if the reward modal could only be reached by actually breaking all 40 cells, automated verification would be impossible.
+Only in DEV builds, the engine is exposed as `window.__deckout` (confirmed that not even the string survives in the production bundle). `__deckout.debugClearBricks()` destroys every remaining brick **through the normal damage path**, reproducing the wave clear flow deterministically — if the reward modal could only be reached by actually breaking all 40 cells, automated verification would be impossible. `debugDrop(id)` drops an item capsule over the paddle, `debugAddRelic(id)` grants a relic, and `debugAddCard(type)` adds a card and puts it on top of the draw pile so the next turn draws it.
 
 ## Balance · persistence · input
 
@@ -434,4 +458,5 @@ There is no test runner yet. Instead, three things were run at every step.
 - If two tabs finish a run within about 1ms of each other, their record writes can overwrite one another (read-modify-write). It is practically impossible to happen naturally, so it was left alone. Record updates from other tabs reach the HUD through the `storage` event.
 - The sound effects are synthesized and have not been tuned by ear. Bricks destroyed in a run in progress are not added to the total if you just close the page.
 - Some numbers, such as `VICTORY_WAVE = 10`, are arbitrary — all of them are adjusted in `src/config/balance.ts`.
-- Candidates: card upgrades/removal, boss waves, moving/healing bricks, seeded replays, adopting a test runner (moving the current Node simulation scripts into it).
+- The boss wave and the second batch of balls and relics were tuned with bots only (see "Boss wave"); whether a core that heals 2 per lost ball feels fair to a person is unknown.
+- Candidates: card upgrades/removal, more boss layouts, moving bricks, seeded replays, adopting a test runner (moving the current Node simulation scripts into it).

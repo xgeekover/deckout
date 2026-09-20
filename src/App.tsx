@@ -116,6 +116,15 @@ export default function App() {
         onExplosion: () => sound.play('explosion'),
         onBallSplit: () => sound.play('rewardPick'),
         onItemCaught: (item) => sound.play(item.good ? 'itemGood' : 'itemBad'),
+        onChainZap: () => sound.play('zap'),
+        onFloorBounce: () => sound.play('floorBounce'),
+        onRelicAnnounce: () => sound.play('relic'),
+        onBossWave: () => sound.play('bossWave'),
+        onBossRegen: () => sound.play('bossRegen'),
+        onBossDefeated: () => {
+          sound.play('explosion');
+          sound.play('bossDown');
+        },
         onBallLost: () => sound.play('ballLost'),
         onWaveClear: () => sound.play('waveClear'),
         onRewardResolved: (picked) => {

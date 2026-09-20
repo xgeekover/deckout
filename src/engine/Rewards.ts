@@ -8,12 +8,15 @@ import { BALL_CARD_DATA } from '../types/game.ts';
 import type { BallType, Rarity, RewardItem } from '../types/game.ts';
 
 /** 보상으로 나오는 볼과 그 등급 */
-const BALL_REWARDS: Array<{ ballType: BallType; rarity: Rarity }> = [
+export const BALL_REWARDS: Array<{ ballType: BallType; rarity: Rarity }> = [
   { ballType: 'normal', rarity: 'COMMON' },
   { ballType: 'heavy', rarity: 'COMMON' },
+  { ballType: 'giant', rarity: 'COMMON' },
   { ballType: 'pierce', rarity: 'RARE' },
   { ballType: 'bomb', rarity: 'RARE' },
   { ballType: 'split', rarity: 'RARE' },
+  { ballType: 'chain', rarity: 'RARE' },
+  { ballType: 'bouncy', rarity: 'RARE' },
 ];
 
 /** 유니언의 각 멤버에 따로 Omit 을 적용한다 (그냥 Omit 은 공통 키만 남긴다) */
@@ -21,7 +24,10 @@ type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K>
 
 type Candidate = DistributiveOmit<RewardItem, 'id'> & { key: string };
 
-const RARITY_ORDER: Rarity[] = ['COMMON', 'RARE', 'LEGENDARY'];
+export const RARITY_ORDER: Rarity[] = ['COMMON', 'RARE', 'LEGENDARY'];
+
+/** a 가 b 이상 등급인가 */
+export const rarityAtLeast = (a: Rarity, b: Rarity): boolean => RARITY_ORDER.indexOf(a) >= RARITY_ORDER.indexOf(b);
 
 /**
  * 2단계 추첨: 먼저 등급을 BALANCE.rewards.rarityChance(70/25/5)로 정하고,
@@ -56,20 +62,22 @@ export function pickByRarity<T extends { rarity: Rarity }>(pool: T[], rand: () =
  *    (볼만 세 장 나와 유물 시스템이 묻히는 것을 막는다).
  *  - 볼도 최소 1장은 보장한다. 유물만 세 장이 나오면 그 웨이브에는 덱을 키울 방법이
  *    없어져, 덱빌딩 게임의 핵심 선택(덱 성장 vs 패시브)이 사라진다.
+ *  - minRarity 를 주면 그 등급 미만의 후보는 아예 빠진다 (보스 웨이브 보상).
  */
 export function rollRewards(
   ownedRelicIds: ReadonlySet<string>,
   wave: number,
   count: number = BALANCE.rewards.choices,
   rand: () => number = Math.random,
+  minRarity: Rarity = 'COMMON',
 ): RewardItem[] {
-  const relics: Candidate[] = RELIC_CATALOG.filter((r) => !ownedRelicIds.has(r.id)).map((relic) => ({
+  const relics: Candidate[] = RELIC_CATALOG.filter((r) => !ownedRelicIds.has(r.id) && rarityAtLeast(r.rarity, minRarity)).map((relic) => ({
     key: `relic:${relic.id}`,
     type: 'RELIC' as const,
     rarity: relic.rarity,
     relic,
   }));
-  const balls: Candidate[] = BALL_REWARDS.map(({ ballType, rarity }) => ({
+  const balls: Candidate[] = BALL_REWARDS.filter((b) => rarityAtLeast(b.rarity, minRarity)).map(({ ballType, rarity }) => ({
     key: `ball:${ballType}`,
     type: 'BALL' as const,
     rarity,
@@ -83,7 +91,7 @@ export function rollRewards(
     relics.splice(relics.indexOf(guaranteed), 1);
   }
 
-  if (picks.length < count) {
+  if (picks.length < count && balls.length > 0) {
     const guaranteedBall = pickByRarity(balls, rand);
     picks.push(guaranteedBall);
     balls.splice(balls.indexOf(guaranteedBall), 1);

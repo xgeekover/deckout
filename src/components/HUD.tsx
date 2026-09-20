@@ -102,6 +102,11 @@ export function HUD({
               {patternName(t, state.wavePatternId, state.wavePattern)}
             </span>
           )}
+          {state.boss && (
+            <span data-testid="hud-boss" className="text-[11px] tabular-nums text-fuchsia-300">
+              {t.hud.bossCore} · {state.boss.hp}/{state.boss.maxHp}
+            </span>
+          )}
           {/* 새 줄은 웨이브마다 정해진 수만큼만 들어온다. 0 이 되면 남은 벽돌만 치우면 된다. */}
           <span
             data-testid="reinforcements-left"
@@ -339,7 +344,7 @@ function RelicBar({ relics, charges }: { relics: Relic[]; charges: Record<string
       ) : (
         <ul className="mt-2 flex flex-wrap gap-2">
           {relics.map((relic) => {
-            const limited = relic.chargesPerWave !== undefined;
+            const limited = relic.chargesPerWave !== undefined || relic.chargesPerRun !== undefined;
             const left = charges[relic.id] ?? 0;
             const spent = limited && left <= 0;
             const text = relicText(t, relic);
@@ -372,7 +377,9 @@ function RelicBar({ relics, charges }: { relics: Relic[]; charges: Record<string
                   </p>
                   {limited && (
                     <p className="mt-1.5 text-[10px] text-deck-accent">
-                      {t.hud.chargesLeft(left, relic.chargesPerWave ?? 0)}
+                      {relic.chargesPerRun !== undefined
+                        ? t.hud.chargesLeftRun(left, relic.chargesPerRun)
+                        : t.hud.chargesLeft(left, relic.chargesPerWave ?? 0)}
                     </p>
                   )}
                 </div>

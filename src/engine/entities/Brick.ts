@@ -28,6 +28,14 @@ const BOMB_TIER: Tier = {
   text: '#fff0e0',
 };
 
+/** 보스 코어 — 다른 어떤 벽돌과도 다른 보라 */
+const BOSS_TIER: Tier = {
+  base: '#4a1060',
+  edge: '#e879f9',
+  glow: 'rgba(232, 121, 249, 0.6)',
+  text: '#fdf4ff',
+};
+
 const tierFor = (hp: number): Tier => HP_TIERS[Math.min(Math.max(hp, 1), HP_TIERS.length) - 1];
 
 /** maxHp 로 벽돌의 분류를 정한다. */
@@ -85,11 +93,24 @@ export class Brick implements BrickModel {
   }
 
   get tier(): Tier {
-    return this.type === 'bomb' ? BOMB_TIER : tierFor(this.hp);
+    return this.type === 'bomb' ? BOMB_TIER : this.type === 'boss' ? BOSS_TIER : tierFor(this.hp);
   }
 
   get isBomb(): boolean {
     return this.type === 'bomb';
+  }
+
+  get isBoss(): boolean {
+    return this.type === 'boss';
+  }
+
+  /** HP 를 최대치까지 회복한다. 실제로 오른 양을 돌려준다. */
+  heal(amount: number): number {
+    if (this.isDestroyed || amount <= 0) return 0;
+    const before = this.hp;
+    this.hp = Math.min(this.maxHp, this.hp + amount);
+    if (this.hp > before) this.flash = 0.12;
+    return this.hp - before;
   }
 
   /** 엔진 바깥(훅/UI)으로 넘길 때 쓰는 순수 데이터 스냅샷 */
@@ -174,6 +195,40 @@ export class Brick implements BrickModel {
     ctx.lineWidth = this.maxHp > 1 ? 2 : 1;
     ctx.stroke();
 
+    if (this.isBoss) {
+      // 코어: 느리게 맥동하는 글로우 + 큰 HP 숫자 + BOSS 라벨. 체력 바는 아래 공통 경로가 그린다.
+      const pulse = 0.5 + 0.5 * Math.sin(performance.now() / 420);
+      ctx.shadowColor = glow;
+      ctx.shadowBlur = 14 + 18 * pulse;
+      ctx.strokeStyle = edge;
+      ctx.lineWidth = 3;
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+      // 안쪽 육각 결정
+      const cx = x + w / 2;
+      const cy = y + h / 2 - 3;
+      const r = Math.min(h * 0.32, 18);
+      ctx.beginPath();
+      for (let i = 0; i < 6; i++) {
+        const a = (Math.PI / 3) * i - Math.PI / 6;
+        const px = cx + Math.cos(a) * r;
+        const py = cy + Math.sin(a) * r;
+        if (i === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+      }
+      ctx.closePath();
+      ctx.fillStyle = `rgba(232, 121, 249, ${0.18 + 0.22 * pulse})`;
+      ctx.fill();
+      ctx.strokeStyle = edge;
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+      ctx.fillStyle = text;
+      ctx.font = '800 9px ui-sans-serif, system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('BOSS', cx, y + 9);
+    }
+
     if (this.isBomb) {
       // 맥동하는 외곽 글로우 — "이건 터진다"는 신호
       const pulse = 0.55 + 0.45 * Math.sin(performance.now() / 180);
@@ -214,12 +269,12 @@ export class Brick implements BrickModel {
       ctx.fillRect(x + 4, y + h - 5, (w - 8) * ratio, 3);
       ctx.shadowBlur = 0;
 
-      // 숫자로도 표시
+      // 숫자로도 표시 (코어는 크게)
       ctx.fillStyle = text;
-      ctx.font = '700 12px ui-sans-serif, system-ui, sans-serif';
+      ctx.font = this.isBoss ? '800 20px ui-sans-serif, system-ui, sans-serif' : '700 12px ui-sans-serif, system-ui, sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText(String(this.hp), x + w / 2, y + h / 2 - 1);
+      ctx.fillText(String(this.hp), x + w / 2, y + h / 2 - (this.isBoss ? 3 : 1));
     }
 
     // 피격 플래시

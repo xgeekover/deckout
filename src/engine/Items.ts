@@ -47,11 +47,12 @@ function weightedPick(pool: readonly ItemDef[], r: number): ItemDef {
 /**
  * 새 벽돌에 아이템을 숨길지 정한다. 없으면 null.
  * r1: 드롭 여부, r2: 좋은/나쁜, r3: 종류 — 난수를 밖에서 넣어 결정적으로 검증할 수 있다.
+ * dropMul · badMul: 유물(행운의 부적)의 배율. 확률은 1을 넘지 않는다.
  */
-export function rollItem(r1 = Math.random(), r2 = Math.random(), r3 = Math.random()): ItemId | null {
+export function rollItem(r1 = Math.random(), r2 = Math.random(), r3 = Math.random(), dropMul = 1, badMul = 1): ItemId | null {
   const { dropChance, badChance } = BALANCE.items;
-  if (r1 >= dropChance) return null;
-  const pool = ITEM_LIST.filter((d) => d.good !== (r2 < badChance));
+  if (r1 >= Math.min(1, dropChance * dropMul)) return null;
+  const pool = ITEM_LIST.filter((d) => d.good !== (r2 < Math.min(1, badChance * badMul)));
   return weightedPick(pool, r3).id;
 }
 

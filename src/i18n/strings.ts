@@ -19,8 +19,18 @@ export const DEFAULT_LANGUAGE: Language = 'en';
 /** 언어 이름은 번역하지 않는다 — 각자의 언어로 적어야 그 언어 사용자가 찾을 수 있다. */
 export const LANGUAGE_NAMES: Record<Language, string> = { en: 'English', ko: '한국어' };
 
-export type RelicId = 'wide-paddle' | 'flame-trail' | 'safety-net' | 'scrap-cycle';
-export type PatternId = 'full' | 'checker' | 'inverted-triangle' | 'shield' | 'diamond' | 'columns';
+export type RelicId =
+  | 'wide-paddle'
+  | 'flame-trail'
+  | 'safety-net'
+  | 'scrap-cycle'
+  | 'lucky-charm'
+  | 'iron-core'
+  | 'demolition'
+  | 'anchor'
+  | 'overcharge'
+  | 'phoenix';
+export type PatternId = 'full' | 'checker' | 'inverted-triangle' | 'shield' | 'diamond' | 'columns' | 'boss';
 
 export interface NameAndDescription {
   name: string;
@@ -89,6 +99,9 @@ export interface Strings {
     relicCount: (n: number) => string;
     relicsEmpty: string;
     chargesLeft: (left: number, total: number) => string;
+    chargesLeftRun: (left: number, total: number) => string;
+    /** 보스 웨이브의 코어 체력 라벨 */
+    bossCore: string;
     comboBest: (n: number) => string;
     comboUnit: string;
     untilDeadline: string;
@@ -110,6 +123,8 @@ export interface Strings {
     waiting: string;
     relicsAria: string;
     openInfo: string;
+    /** 점수줄의 보스 체력 라벨 (픽셀 폰트 — 짧은 대문자) */
+    boss: string;
     promptLaunchKeyboard: string;
     promptLaunchTouch: string;
     promptPlaying: string;
@@ -145,6 +160,8 @@ export interface Strings {
     statPierce: string;
     statBlast: string;
     statSplit: (pieces: number) => string;
+    statChain: (targets: number) => string;
+    statBounce: string;
     currentDeck: string;
     relics: string;
   };
@@ -181,6 +198,9 @@ const plural = (n: number, one: string, many = `${one}s`): string => `${n} ${n =
 const R = BALANCE.relics;
 const HEAVY_DAMAGE = BALANCE.ball.stats.heavy.damage;
 const SPLIT_PIECES = BALANCE.ball.stats.split.splitCount + 1;
+const GIANT_DAMAGE = BALANCE.ball.stats.giant.damage;
+const CHAIN_TARGETS = BALANCE.ball.stats.chain.chainCount;
+const BOSS_REGEN = BALANCE.boss.regenPerTurn;
 
 const en: Strings = {
   tagline: 'Breakout × deckbuilding roguelite',
@@ -207,11 +227,38 @@ const en: Strings = {
     pierce: { name: 'Pierce Ball', description: 'Punches straight through bricks. A whole row at once.' },
     bomb: { name: 'Bomb Ball', description: 'Explodes wherever it breaks a brick, taking the neighbors with it.' },
     split: { name: 'Split Ball', description: `Splits into ${SPLIT_PIECES} the moment it hits its first brick.` },
+    giant: { name: 'Giant Ball', description: `Big and heavy — hits for ${GIANT_DAMAGE}, and wide enough to strike two bricks at once.` },
+    chain: { name: 'Chain Ball', description: `Every brick it breaks sends lightning to the ${CHAIN_TARGETS} nearest bricks.` },
+    bouncy: { name: 'Bouncy Ball', description: 'Bounces back up from the floor once per turn on its own.' },
   },
   relics: {
     'wide-paddle': {
       name: 'Wide Paddle',
       description: `Your paddle is ${percent(R.widePaddleWidthMul)}% wider.`,
+    },
+    'lucky-charm': {
+      name: 'Lucky Charm',
+      description: `Bricks hide items ${percent(R.luckyCharmDropMul)}% more often, and bad items are ${-percent(R.luckyCharmBadMul)}% rarer.`,
+    },
+    'iron-core': {
+      name: 'Iron Core',
+      description: `Basic Balls deal +${R.ironCoreDamageAdd} damage.`,
+    },
+    demolition: {
+      name: 'Demolition Charge',
+      description: `Once per wave, the first brick you destroy explodes (radius ${R.demolitionRadius}, damage ${R.demolitionDamage}).`,
+    },
+    anchor: {
+      name: 'Anchor',
+      description: 'Once per wave, losing a ball does not bring the bricks down — and no new row comes in.',
+    },
+    overcharge: {
+      name: 'Overcharge',
+      description: `Reach a ${R.overchargeCombo}-hit combo in one turn and every ball in flight deals +${R.overchargeDamageAdd} damage for the rest of the turn.`,
+    },
+    phoenix: {
+      name: 'Phoenix Feather',
+      description: `Once per run, when the bricks reach the deadline, the lowest ${R.phoenixRows} rows burn away instead and the run goes on.`,
     },
     'flame-trail': {
       name: 'Flame Trail',
@@ -245,6 +292,7 @@ const en: Strings = {
     shield: 'Shield Wall',
     diamond: 'Diamond',
     columns: 'Columns',
+    boss: 'Boss — The Core',
   },
 
   common: {
@@ -292,6 +340,8 @@ const en: Strings = {
     relicCount: (n) => `${n} held`,
     relicsEmpty: 'Clear a wave to earn one.',
     chargesLeft: (left, total) => `Uses left this wave: ${left} / ${total}`,
+    chargesLeftRun: (left, total) => `Uses left this run: ${left} / ${total}`,
+    bossCore: `Boss core — heals ${BOSS_REGEN} every time you lose a ball`,
     comboBest: (n) => `Best ${n}`,
     comboUnit: 'hits in a row',
     untilDeadline: 'Until deadline',
@@ -312,6 +362,7 @@ const en: Strings = {
     waiting: 'DRAWING…',
     relicsAria: 'Relics held',
     openInfo: 'Details · settings · new game',
+    boss: 'BOSS',
     promptLaunchKeyboard: 'PRESS SPACE TO LAUNCH',
     promptLaunchTouch: 'TAP TO LAUNCH · DRAG TO MOVE',
     promptPlaying: '',
@@ -347,6 +398,8 @@ const en: Strings = {
     statPierce: 'Pierce',
     statBlast: 'Blast',
     statSplit: (pieces) => `Split ×${pieces}`,
+    statChain: (targets) => `Chain ×${targets}`,
+    statBounce: 'Floor bounce',
     currentDeck: 'Deck',
     relics: 'Relics',
   },
@@ -402,11 +455,38 @@ const ko: Strings = {
     pierce: { name: '관통 구체', description: '벽돌을 뚫고 지나간다. 한 줄을 통째로.' },
     bomb: { name: '폭탄 구체', description: '부순 자리에서 폭발해 주변까지 쓸어버린다.' },
     split: { name: '분열 구체', description: `첫 벽돌에 맞는 순간 ${SPLIT_PIECES}개로 갈라진다.` },
+    giant: { name: '거대 구체', description: `크고 무겁다 — 대미지 ${GIANT_DAMAGE}, 굵어서 두 벽돌을 한 번에 때린다.` },
+    chain: { name: '연쇄 구체', description: `벽돌을 부술 때마다 가장 가까운 벽돌 ${CHAIN_TARGETS}개에 번개가 튄다.` },
+    bouncy: { name: '탄성 구체', description: '턴마다 한 번, 바닥에서 스스로 튕겨 오른다.' },
   },
   relics: {
     'wide-paddle': {
       name: '광폭 패들',
       description: `패들 너비가 ${percent(R.widePaddleWidthMul)}% 넓어진다.`,
+    },
+    'lucky-charm': {
+      name: '행운의 부적',
+      description: `벽돌이 아이템을 ${percent(R.luckyCharmDropMul)}% 더 자주 품고, 나쁜 아이템은 ${-percent(R.luckyCharmBadMul)}% 드물어진다.`,
+    },
+    'iron-core': {
+      name: '강철 심',
+      description: `기본 구체의 대미지 +${R.ironCoreDamageAdd}.`,
+    },
+    demolition: {
+      name: '철거 장약',
+      description: `웨이브당 1회, 처음 부수는 벽돌이 폭발한다 (반경 ${R.demolitionRadius} · 피해 ${R.demolitionDamage}).`,
+    },
+    anchor: {
+      name: '닻',
+      description: '웨이브당 1회, 공을 잃어도 벽돌이 내려오지 않는다 — 새 줄도 들어오지 않는다.',
+    },
+    overcharge: {
+      name: '과충전',
+      description: `한 턴에 콤보 ${R.overchargeCombo}를 달성하면 날아가는 모든 공의 대미지가 턴이 끝날 때까지 +${R.overchargeDamageAdd}.`,
+    },
+    phoenix: {
+      name: '불사조 깃털',
+      description: `한 판에 1회, 벽돌이 데드라인에 닿는 순간 아래 ${R.phoenixRows}줄이 타 없어지고 판이 이어진다.`,
     },
     'flame-trail': {
       name: '화염 도선',
@@ -440,6 +520,7 @@ const ko: Strings = {
     shield: '보호막',
     diamond: '다이아몬드',
     columns: '기둥',
+    boss: '보스 — 코어',
   },
 
   common: {
@@ -487,6 +568,8 @@ const ko: Strings = {
     relicCount: (n) => `${n}개`,
     relicsEmpty: '웨이브를 클리어하면 얻을 수 있습니다.',
     chargesLeft: (left, total) => `이번 웨이브 남은 횟수 ${left} / ${total}`,
+    chargesLeftRun: (left, total) => `이번 판 남은 횟수 ${left} / ${total}`,
+    bossCore: `보스 코어 — 공을 잃을 때마다 ${BOSS_REGEN} 회복`,
     comboBest: (n) => `최고 ${n}`,
     comboUnit: '연속 타격',
     untilDeadline: '데드라인까지',
@@ -507,6 +590,7 @@ const ko: Strings = {
     waiting: '뽑는 중…',
     relicsAria: '보유 유물',
     openInfo: '자세한 정보 · 설정 · 새 게임',
+    boss: 'BOSS',
     promptLaunchKeyboard: 'SPACE 로 발사',
     promptLaunchTouch: '탭: 발사 · 드래그: 이동',
     promptPlaying: '',
@@ -542,6 +626,8 @@ const ko: Strings = {
     statPierce: '관통',
     statBlast: '폭발',
     statSplit: (pieces) => `${pieces}분열`,
+    statChain: (targets) => `연쇄 ${targets}`,
+    statBounce: '바닥 반동',
     currentDeck: '현재 덱',
     relics: '유물',
   },

@@ -11,7 +11,9 @@
 import {
   BALANCE,
   bombBrickChance,
+  bossHp,
   clampBallSpeed,
+  isBossWave,
   reinforcementBudget,
   spawnCellHp,
   spawnDifficulty,
@@ -19,7 +21,7 @@ import {
 } from '../config/balance';
 import { FloatingTextSystem } from './FloatingText';
 import { ParticleSystem } from './ParticleSystem';
-import { resolveModifiers } from './Relics';
+import { RELIC_CATALOG, damageAddFor, resolveModifiers } from './Relics';
 import type { ResolvedModifiers } from './Relics';
 import { rollRewards } from './Rewards';
 import { Drop, ITEMS, freshTurnEffects, rollItem } from './Items';
@@ -57,8 +59,10 @@ import type {
   BrickGridConfig,
   BrickType,
   BallData,
+  BallType,
   DeckCard,
   GameState,
+  Rarity,
   Relic,
   RelicContext,
   RewardItem,
@@ -109,6 +113,18 @@ export interface EngineHooks {
   onBallSplit?: (count: number) => void;
   /** 떨어지는 아이템을 패들로 받았을 때 (좋은 것이든 나쁜 것이든) */
   onItemCaught?: (item: ItemDef) => void;
+  /** 연쇄 구체의 번개가 튀었을 때 (부순 벽돌 하나당 한 번) */
+  onChainZap?: () => void;
+  /** 탄성 구체가 바닥에서 스스로 튕겨 올랐을 때 */
+  onFloorBounce?: () => void;
+  /** 유물이 발동해 캔버스에 문구를 띄웠을 때 (SAFETY NET! · ANCHOR! …) */
+  onRelicAnnounce?: (text: string) => void;
+  /** 보스 웨이브가 시작될 때 */
+  onBossWave?: (wave: number) => void;
+  /** 보스 코어가 회복했을 때 */
+  onBossRegen?: (amount: number) => void;
+  /** 보스 코어를 부쉈을 때 */
+  onBossDefeated?: () => void;
   /** 공이 바닥을 완전히 벗어났을 때 */
   onBallLost?: (turn: number) => void;
   /** 턴 정산(벽돌 하강 + 신규 행 스폰)이 끝났을 때 */
@@ -132,6 +148,18 @@ interface Blast {
   radius: number;
   damage: number;
 }
+
+/** 연쇄 구체의 번개 한 줄기 (연출 전용 — 피해는 생기는 순간 이미 들어갔다) */
+interface Bolt {
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+  life: number;
+  color: string;
+}
+
+const BOLT_SECONDS = 0.22;
 
 /**
  * patchState 용 비교. 배열/평면 객체는 한 단계 얕게 비교해,
@@ -202,6 +230,8 @@ export class GameEngine {
   private drops: Drop[] = [];
   /** 이번 턴에 받은 아이템 효과. 공을 전부 잃으면 초기화된다 */
   private turnEffects: TurnEffects = freshTurnEffects();
+  /** 지금 그려지고 있는 번개 줄기들 */
+  private bolts: Bolt[] = [];
   private particles = new ParticleSystem();
   private floating = new FloatingTextSystem(GAME_WIDTH);
   private shake = new ScreenShake();
@@ -426,6 +456,20 @@ export class GameEngine {
     if (this.flushBrickChanges()) this.clearWave();
   }
 
+  /** 개발용: 유물을 즉시 보유 목록에 넣는다 (검증 스크립트가 쓴다) */
+  debugAddRelic(id: string): void {
+    const relic = RELIC_CATALOG.find((r) => r.id === id);
+    if (relic) this.addRelic(relic);
+  }
+
+  /** 개발용: 카드를 영구 덱에 넣고 드로우 더미 맨 위에 올려 다음 턴에 바로 뽑히게 한다 */
+  debugAddCard(type: BallType): void {
+    const card = makeCard(BALL_CARD_DATA[type]);
+    this.deck = [...this.deck, card];
+    this.drawPile.push(card);
+    this.patchState({ deck: this.deck, drawPileCount: this.drawPile.length });
+  }
+
   /** 게임오버/승리 후 재시작 (R 키) */
   restart(): void {
     this.reset();
@@ -471,6 +515,7 @@ export class GameEngine {
     this.bricks = [];
     this.brickRects = [];
     this.drops = [];
+    this.bolts = [];
     this.turnEffects = freshTurnEffects();
     this.state = { ...createInitialGameState(), deck: this.deck };
     this.aimAngle = -Math.PI / 2;
@@ -535,6 +580,7 @@ export class GameEngine {
       bricksRemaining: this.bricks.length,
       deck: this.deck,
       discardPileCount: 0,
+      boss: this.bossState(),
     });
     this.beginTurn();
 
@@ -546,6 +592,19 @@ export class GameEngine {
       // 위치: 처음 몇 턴의 조작 안내(캔버스 58% 높이)와 데드라인 사이 — 겹치지 않게 패들 위 120px
       this.floating.spawnBanner(GAME_WIDTH / 2, this.paddle.y - 120, text, color);
     }
+
+    // 보스 웨이브 예고 — 벽돌 아래, 조작 안내 위
+    if (this.state.boss) {
+      this.floating.spawnBanner(GAME_WIDTH / 2, GAME_HEIGHT * 0.53, 'BOSS WAVE', '#e879f9');
+      this.shake.shake(...SHAKE.explosion);
+      this.hooks.onBossWave?.(wave);
+    }
+  }
+
+  /** 살아 있는 보스 코어의 체력 (UI 스냅샷용). 없으면 null */
+  private bossState(): GameState['boss'] {
+    const boss = this.bricks.find((b) => b.isBoss && !b.isDestroyed);
+    return boss ? { hp: boss.hp, maxHp: boss.maxHp } : null;
   }
 
   /**
@@ -553,12 +612,13 @@ export class GameEngine {
    * 칸의 유무는 WavePatterns, 폭/여백 계산은 spawnRow 가 맡는다.
    */
   private buildBricks(wave: number, pattern: WavePattern): void {
-    const { rows, cols } = this.grid;
+    const { rows, cols, gap, height } = this.grid;
     const drop = waveStartRowDrop(wave); // 후반 웨이브는 더 낮은 곳에서 시작한다 (데드라인까지의 여유 턴 감소)
+    const pitch = rowPitch(this.grid);
     this.bricks = [];
 
     for (let row = 0; row < rows; row++) {
-      const y = this.grid.top + (row + drop) * rowPitch(this.grid);
+      const y = this.grid.top + (row + drop) * pitch;
       const cells = this.spawnRow(y, (col) => {
         if (!pattern.has(row, col, rows, cols)) return { hp: 0 };
         const hp = waveCellHp(wave, row) + (pattern.hpBonus?.(row, col, rows, cols) ?? 0);
@@ -568,30 +628,50 @@ export class GameEngine {
       });
       for (const brick of cells) this.bricks.push(brick);
     }
+
+    // 보스 코어: 여러 칸을 하나로 덮는 거대 벽돌. 아이템은 숨기지 않는다 (부수면 웨이브가 끝나기 쉬우므로 의미가 없다).
+    const region = pattern.boss?.(rows, cols);
+    if (region) {
+      const { brickWidth, originX } = this.cellGeometry();
+      const core = new Brick(
+        originX + region.col * (brickWidth + gap),
+        this.grid.top + (region.row + drop) * pitch,
+        brickWidth * region.cols + gap * (region.cols - 1),
+        height * region.rows + gap * (region.rows - 1),
+        bossHp(wave),
+        'boss',
+      );
+      this.bricks.push(core);
+    }
     this.syncBrickRects();
   }
 
-  /**
-   * y 위치에 한 행을 만든다. 폭/여백은 그리드 설정에서 매번 다시 계산하므로
-   * cols 나 sideMargin 을 바꿔도 정확히 중앙 정렬된다.
-   */
+  /** 그리드 칸의 폭과 첫 칸의 x. 그리드 설정에서 매번 다시 계산하므로 cols 나 sideMargin 을 바꿔도 정확히 중앙 정렬된다. */
+  private cellGeometry(): { brickWidth: number; originX: number } {
+    const { cols, gap, sideMargin } = this.grid;
+    const usableWidth = FIELD.w - sideMargin * 2;
+    const brickWidth = (usableWidth - gap * (cols - 1)) / cols;
+    const gridWidth = brickWidth * cols + gap * (cols - 1);
+    return { brickWidth, originX: FIELD.x + (FIELD.w - gridWidth) / 2 };
+  }
+
+  /** y 위치에 한 행을 만든다. */
   private spawnRow(
     y: number,
     cellFor: (col: number) => { hp: number; type?: BrickType },
   ): Brick[] {
-    const { cols, gap, sideMargin, height } = this.grid;
-    const usableWidth = FIELD.w - sideMargin * 2;
-    const brickWidth = (usableWidth - gap * (cols - 1)) / cols;
-    const gridWidth = brickWidth * cols + gap * (cols - 1);
-    const originX = FIELD.x + (FIELD.w - gridWidth) / 2;
+    const { cols, gap, height } = this.grid;
+    const { brickWidth, originX } = this.cellGeometry();
 
     const row: Brick[] = [];
     for (let col = 0; col < cols; col++) {
       const { hp, type } = cellFor(col);
       if (hp <= 0) continue; // 빈 칸
       const brick = new Brick(originX + col * (brickWidth + gap), y, brickWidth, height, hp, type);
-      // 폭탄 벽돌은 기폭 장치라 아이템을 숨기지 않는다
-      if (!brick.isBomb) brick.item = rollItem();
+      // 폭탄 벽돌은 기폭 장치라 아이템을 숨기지 않는다. 행운의 부적은 확률을 배율로 바꾼다.
+      if (!brick.isBomb) {
+        brick.item = rollItem(Math.random(), Math.random(), Math.random(), this.modifiers.itemDropMul, this.modifiers.itemBadMul);
+      }
       row.push(brick);
     }
     return row;
@@ -645,7 +725,7 @@ export class GameEngine {
     // 유물의 상시 보정치는 공이 만들어질 때 반영된다.
     // 배율이 몇 개가 겹쳐도 상한을 넘지 않는다 (서브스텝당 이동량이 커지면 터널링이 생긴다).
     ball.baseSpeed = clampBallSpeed(ball.baseSpeed * this.modifiers.ballSpeedMul);
-    ball.damage += this.modifiers.ballDamageAdd;
+    ball.damage += damageAddFor(this.modifiers, ball.type);
     ball.attachTo(this.paddle.x, this.paddle.y);
     this.balls = [ball];
     this.aimAngle = -Math.PI / 2;
@@ -683,6 +763,16 @@ export class GameEngine {
     this.balls = [];
     this.patchState({ phase: 'TURN_RESOLVING', currentCard: null });
 
+    // 보스 코어는 공을 잃을 때마다 회복한다 — "끝내지 못하면 되돌아온다"는 압박
+    this.regenBoss();
+
+    // 닻: 이번에는 벽돌이 내려오지 않고 새 줄도 들어오지 않는다 (증원 한도는 그대로 남는다)
+    const held = this.relics.some((relic) => relic.onDescend?.(this.relicCtx) === true);
+    if (held) {
+      this.slideElapsed = SLIDE_DURATION; // 다음 스텝에 바로 정산된다 (움직일 것이 없다)
+      return;
+    }
+
     const pitch = rowPitch(this.grid);
     for (const brick of this.bricks) brick.beginSlide(pitch);
 
@@ -702,6 +792,18 @@ export class GameEngine {
     }
 
     this.slideElapsed = 0;
+  }
+
+  private regenBoss(): void {
+    const boss = this.bricks.find((b) => b.isBoss && !b.isDestroyed);
+    if (!boss) return;
+    const healed = boss.heal(BALANCE.boss.regenPerTurn);
+    if (healed <= 0) return;
+    const c = boss.center;
+    this.floating.spawnNotice(c.x, c.y - 10, `+${healed}`, '#e879f9');
+    this.particles.emit(c.x, c.y, 16, '#e879f9', { speed: 90, life: 0.5, gravity: -120, drag: 2 });
+    this.patchState({ boss: this.bossState() });
+    this.hooks.onBossRegen?.(healed);
   }
 
   /** TURN_RESOLVING 동안 매 스텝 호출되어 하강 애니메이션을 진행한다. */
@@ -729,12 +831,47 @@ export class GameEngine {
 
     // 패배도 "버텨낸 턴 수"로 보고해야 하므로 카운터를 올리기 전에 판정한다.
     if (this.isDeadlineBreached()) {
-      this.triggerGameOver();
-      return;
+      if (!this.tryPhoenix()) {
+        this.triggerGameOver();
+        return;
+      }
+      // 아래 줄들이 타 없어져 필드가 비었으면 그대로 웨이브 클리어
+      if (this.bricks.length === 0) {
+        this.clearWave();
+        return;
+      }
     }
 
     this.patchState({ turn: { currentTurn: endedTurn + 1, canLaunch: false } });
     this.beginTurn();
+  }
+
+  /**
+   * 불사조 깃털: 데드라인에 닿은 순간 유물이 받아 주면, 데드라인에서 위로 phoenixRows 줄 안에 걸친 벽돌을
+   * 점수 없이 태워 없앤다. 벽돌은 항상 줄 단위로 내려오므로 "가장 낮은 N 줄"과 같다.
+   */
+  private tryPhoenix(): boolean {
+    const saved = this.relics.some((relic) => relic.onDeadline?.(this.relicCtx) === true);
+    if (!saved) return false;
+
+    const pitch = rowPitch(this.grid);
+    const threshold = DEADLINE_Y - pitch * (BALANCE.relics.phoenixRows - 1) - 0.5;
+    const burned = this.bricks.filter((b) => b.bottom >= threshold);
+    for (const brick of burned) {
+      const c = brick.center;
+      this.particles.explosion(c.x, c.y, 60);
+      this.particles.emit(c.x, c.y, 14, '#ff8a3d', { speed: 160, life: 0.7, gravity: -200, drag: 1.5 });
+    }
+    this.bricks = this.bricks.filter((b) => !burned.includes(b));
+    this.syncBrickRects();
+    this.shake.shake(...SHAKE.explosion);
+    this.requestHitStop(HITSTOP.explosion);
+    this.patchState({
+      bricksRemaining: this.bricks.length,
+      turnsUntilDeadline: this.computeTurnsUntilDeadline(),
+      boss: this.bossState(),
+    });
+    return true;
   }
 
   /** 벽돌 하단이 데드라인(=패들 위 40px)에 닿았는가. */
@@ -801,11 +938,14 @@ export class GameEngine {
       return;
     }
 
-    const rewards = rollRewards(new Set(this.relics.map((r) => r.id)), wave);
+    // 보스를 깬 보상은 등급 하한이 있다 (COMMON 은 나오지 않는다)
+    const minRarity: Rarity = isBossWave(wave) ? (BALANCE.boss.rewardMinRarity as Rarity) : 'COMMON';
+    const rewards = rollRewards(new Set(this.relics.map((r) => r.id)), wave, BALANCE.rewards.choices, Math.random, minRarity);
     this.patchState({
       phase: 'REWARD',
       currentCard: null,
       rewardChoices: rewards,
+      boss: null,
       score: this.state.score + bonus,
       bricksRemaining: 0,
       turnsUntilDeadline: -1,
@@ -847,6 +987,16 @@ export class GameEngine {
       },
       announce: (text) => {
         this.floating.spawnNotice(this.paddle.x, this.paddle.y - 56, text);
+        this.hooks.onRelicAnnounce?.(text);
+      },
+      blast: (x, y, radius, damage) => {
+        // 폭탄 벽돌과 같은 큐로 들어간다. 벽돌 피해 경로가 끝날 때 resolveBlasts 가 처리한다.
+        this.pendingBlasts.push({ x, y, radius, damage });
+      },
+      addTurnDamage: (amount) => {
+        this.turnEffects.damageAdd += amount;
+        for (const ball of this.balls) ball.damage += amount;
+        for (const ball of this.pendingBalls) ball.damage += amount;
       },
     };
   }
@@ -860,6 +1010,7 @@ export class GameEngine {
     if (this.relics.some((r) => r.id === relic.id)) return;
     this.relics = [...this.relics, relic];
     if (relic.chargesPerWave) this.relicCharges.set(relic.id, relic.chargesPerWave);
+    if (relic.chargesPerRun) this.relicCharges.set(relic.id, relic.chargesPerRun); // 웨이브가 바뀌어도 다시 차지 않는다
     this.applyModifiers();
     this.syncRelicState();
   }
@@ -1023,9 +1174,14 @@ export class GameEngine {
   }
 
   private tryRescueBall(ball: Ball): boolean {
-    // 이번 턴의 보호막(SHIELD 아이템)이 먼저, 그 다음 유물(안전망)
+    // 공 자신의 반동(탄성 구체) → 이번 턴의 보호막(SHIELD 아이템) → 유물(안전망) 순으로 소모한다
     let rescued = false;
-    if (this.turnEffects.shield > 0) {
+    if (ball.floorBounces > 0) {
+      ball.floorBounces -= 1;
+      this.floating.spawnNotice(ball.x, FIELD.y + FIELD.h - 30, 'BOUNCE!', BALL_STATS[ball.type].color);
+      this.hooks.onFloorBounce?.();
+      rescued = true;
+    } else if (this.turnEffects.shield > 0) {
       this.turnEffects.shield -= 1;
       this.floating.spawnNotice(ball.x, FIELD.y + FIELD.h - 30, 'SHIELD!', ITEMS.shield.color);
       rescued = true;
@@ -1111,6 +1267,10 @@ export class GameEngine {
     this.floating.update(delta);
     this.shake.update(delta);
     for (const brick of this.bricks) brick.update(delta);
+    if (this.bolts.length > 0) {
+      for (const bolt of this.bolts) bolt.life -= delta;
+      this.bolts = this.bolts.filter((b) => b.life > 0);
+    }
     for (const ball of this.balls) {
       ball.recordHistory();
       // 화염 도선: 날아가는 공 뒤로 불씨를 흘린다.
@@ -1134,6 +1294,7 @@ export class GameEngine {
     return (
       this.particles.count === 0 &&
       this.floating.count === 0 &&
+      this.bolts.length === 0 &&
       !this.shake.active &&
       this.hitStop <= 0 &&
       this.netFlash <= 0
@@ -1302,6 +1463,9 @@ export class GameEngine {
     const comboBefore = this.combo;
     const anchor = resolved.contacts[0].result.collision.contact;
     let directHit = false;
+    /** 이번 충돌로 부순 벽돌의 중심 — 연쇄 구체의 번개 출발점 */
+    const destroyedAt: Array<{ x: number; y: number }> = [];
+    const hitIds = new Set<number>();
 
     for (const { index, result } of resolved.contacts) {
       const brick = this.bricks[index];
@@ -1310,13 +1474,17 @@ export class GameEngine {
       if (!ball.canHit(brick.id)) continue;
 
       ball.markHit(brick.id);
+      hitIds.add(brick.id);
       directHit = true;
+      const center = brick.center;
       const destroyed = this.damageBrick(
         brick,
         ball.damage,
         result.collision.contact.x,
         result.collision.contact.y,
       );
+
+      if (destroyed) destroyedAt.push(center);
 
       // 폭탄 구체는 벽돌을 부술 때마다 타격 지점에서 터진다.
       if (destroyed && stats.explosionRadius) {
@@ -1327,6 +1495,11 @@ export class GameEngine {
           damage: stats.explosionDamage ?? 1,
         });
       }
+    }
+
+    // 연쇄 구체: 부순 벽돌마다 가까운 벽돌들로 번개가 튄다 (폭발 전에 — 번개가 폭탄 벽돌을 부수면 그것도 터진다)
+    if (stats.chainCount && destroyedAt.length > 0) {
+      for (const origin of destroyedAt) this.chainLightning(origin, hitIds, stats);
     }
 
     this.resolveBlasts();
@@ -1356,6 +1529,29 @@ export class GameEngine {
 
     // 분열은 반사까지 끝난 "튕겨 나가는 방향"을 기준으로 한다.
     if (directHit && ball.canSplit) this.splitBall(ball);
+  }
+
+  /**
+   * 연쇄 구체의 번개: origin 에서 chainRange 안의 가장 가까운 벽돌 chainCount 개에 chainDamage 씩.
+   * 번개가 부순 벽돌에서 다시 튀지는 않는다 (한 번의 타격이 필드를 다 쓸어버리지 않도록).
+   */
+  private chainLightning(origin: { x: number; y: number }, exclude: Set<number>, stats: (typeof BALL_STATS)[BallType]): void {
+    const range = stats.chainRange ?? 0;
+    const targets = this.bricks
+      .filter((b) => !b.isDestroyed && !exclude.has(b.id))
+      .map((b) => ({ brick: b, dist: Math.hypot(b.center.x - origin.x, b.center.y - origin.y) }))
+      .filter((t) => t.dist <= range)
+      .sort((a, b) => a.dist - b.dist)
+      .slice(0, stats.chainCount ?? 0);
+    if (targets.length === 0) return;
+
+    for (const { brick } of targets) {
+      const c = brick.center;
+      this.bolts.push({ x1: origin.x, y1: origin.y, x2: c.x, y2: c.y, life: BOLT_SECONDS, color: stats.trail });
+      this.particles.sparks(c.x, c.y, stats.color);
+      this.damageBrick(brick, stats.chainDamage ?? 1, c.x, c.y);
+    }
+    this.hooks.onChainZap?.();
   }
 
   /**
@@ -1425,6 +1621,15 @@ export class GameEngine {
           damage: BALANCE.bricks.bomb.damage,
         });
       }
+
+      // 보스 코어가 무너진다 — 피해는 없는 큰 연출
+      if (brick.isBoss) {
+        this.particles.explosion(center.x, center.y, 160);
+        this.floating.spawnBanner(center.x, center.y, 'CORE DOWN', '#e879f9');
+        this.shake.shake(...SHAKE.explosion);
+        this.requestHitStop(HITSTOP.explosion * 2);
+        this.hooks.onBossDefeated?.();
+      }
     } else {
       this.particles.sparks(cx, cy, '#ffffff');
       this.shake.shake(...SHAKE.brickHit);
@@ -1472,6 +1677,7 @@ export class GameEngine {
       bricksDestroyed: this.bricksDestroyed,
       combo: this.combo,
       bestCombo: Math.max(this.state.bestCombo, this.combo),
+      boss: this.bossState(),
     });
 
     this.scoreBuffer = 0;
@@ -1527,17 +1733,93 @@ export class GameEngine {
     this.drawDeadline(ctx);
     this.drawSafetyNet(ctx);
     for (const brick of this.bricks) brick.draw(ctx);
+    this.drawBolts(ctx);
     this.drawDrops(ctx);
     this.paddle.draw(ctx);
     for (const ball of this.balls) ball.draw(ctx);
     this.particles.draw(ctx);
 
     this.floating.draw(ctx);
+    this.drawBossBar(ctx);
 
     if (this.state.phase === 'AIMING') this.drawAimHint(ctx);
 
     ctx.restore(); // ── 흔들림 구간 끝
     // 게임오버/승리 화면은 React 의 GameOverModal 이 그린다. 캔버스는 장면만 책임진다.
+  }
+
+  /** 연쇄 구체의 번개 — 매 프레임 새로 꺾이는 들쭉날쭉한 선. 남은 수명에 따라 옅어진다 */
+  private drawBolts(ctx: CanvasRenderingContext2D): void {
+    if (this.bolts.length === 0) return;
+    ctx.save();
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    for (const bolt of this.bolts) {
+      const t = bolt.life / BOLT_SECONDS;
+      const dx = bolt.x2 - bolt.x1;
+      const dy = bolt.y2 - bolt.y1;
+      const len = Math.hypot(dx, dy) || 1;
+      const nx = -dy / len;
+      const ny = dx / len;
+      const segments = Math.max(3, Math.round(len / 22));
+      ctx.beginPath();
+      ctx.moveTo(bolt.x1, bolt.y1);
+      for (let i = 1; i < segments; i++) {
+        const p = i / segments;
+        const jitter = (Math.random() - 0.5) * 16;
+        ctx.lineTo(bolt.x1 + dx * p + nx * jitter, bolt.y1 + dy * p + ny * jitter);
+      }
+      ctx.lineTo(bolt.x2, bolt.y2);
+      ctx.globalAlpha = t;
+      ctx.shadowColor = bolt.color;
+      ctx.shadowBlur = 12;
+      ctx.strokeStyle = bolt.color;
+      ctx.lineWidth = 3;
+      ctx.stroke();
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 1.2;
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  /** 보스 코어의 체력 바 — 필드 상단 중앙, 새 줄이 들어오는 자리보다 위 */
+  private drawBossBar(ctx: CanvasRenderingContext2D): void {
+    const boss = this.state.boss;
+    if (!boss) return;
+    const w = 320;
+    const h = 10;
+    const x = (GAME_WIDTH - w) / 2;
+    const y = 18;
+    const ratio = clamp(boss.hp / boss.maxHp, 0, 1);
+    const pulse = 0.6 + 0.4 * Math.sin(performance.now() / 300);
+
+    ctx.save();
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
+    ctx.beginPath();
+    ctx.roundRect(x - 2, y - 2, w + 4, h + 4, 6);
+    ctx.fill();
+    ctx.shadowColor = 'rgba(232, 121, 249, 0.9)';
+    ctx.shadowBlur = 10 * pulse;
+    ctx.fillStyle = '#e879f9';
+    ctx.beginPath();
+    ctx.roundRect(x, y, w * ratio, h, 5);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = 'rgba(232, 121, 249, 0.8)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.roundRect(x, y, w, h, 5);
+    ctx.stroke();
+
+    ctx.fillStyle = '#fdf4ff';
+    ctx.font = '800 11px ui-sans-serif, system-ui, sans-serif';
+    ctx.textBaseline = 'middle';
+    ctx.textAlign = 'right';
+    ctx.fillText('BOSS', x - 10, y + h / 2);
+    ctx.textAlign = 'left';
+    ctx.fillText(`${boss.hp} / ${boss.maxHp}`, x + w + 10, y + h / 2);
+    ctx.restore();
   }
 
   /**

@@ -20,7 +20,7 @@ export const GAME_HEIGHT = BALANCE.field.height;
 /* ------------------------------------------------------------------ */
 
 /** 덱에 들어갈 수 있는 공의 종류 */
-export type BallType = 'normal' | 'heavy' | 'pierce' | 'bomb' | 'split';
+export type BallType = 'normal' | 'heavy' | 'pierce' | 'bomb' | 'split' | 'giant' | 'chain' | 'bouncy';
 
 export interface BallStats {
   label: string;
@@ -41,6 +41,12 @@ export interface BallStats {
   splitCount?: number;
   /** 분신들이 벌어지는 각도 간격(도) */
   splitAngleDeg?: number;
+  /** 0보다 크면 벽돌을 부술 때마다 chainRange 안의 가장 가까운 벽돌 이 수만큼에 번개가 튄다 */
+  chainCount?: number;
+  chainRange?: number;
+  chainDamage?: number;
+  /** 0보다 크면 바닥에 닿았을 때 이 횟수만큼 스스로 튕겨 오른다 */
+  floorBounces?: number;
 }
 
 export const BALL_STATS: Record<BallType, BallStats> = {
@@ -79,6 +85,27 @@ export const BALL_STATS: Record<BallType, BallStats> = {
     glow: 'rgba(255, 157, 226, 0.55)',
     trail: '#ff9de2',
   },
+  giant: {
+    label: EN.balls.giant.name,
+    ...BALANCE.ball.stats.giant,
+    color: '#f7d558',
+    glow: 'rgba(247, 213, 88, 0.55)',
+    trail: '#f7d558',
+  },
+  chain: {
+    label: EN.balls.chain.name,
+    ...BALANCE.ball.stats.chain,
+    color: '#c4b5fd',
+    glow: 'rgba(167, 139, 250, 0.65)',
+    trail: '#a78bfa',
+  },
+  bouncy: {
+    label: EN.balls.bouncy.name,
+    ...BALANCE.ball.stats.bouncy,
+    color: '#7ef0a8',
+    glow: 'rgba(126, 240, 168, 0.55)',
+    trail: '#7ef0a8',
+  },
 };
 
 /* ------------------------------------------------------------------ */
@@ -108,6 +135,9 @@ export const BALL_CARD_DATA: Record<BallType, BallData> = {
   pierce: { ballType: 'pierce', ...EN.balls.pierce },
   bomb: { ballType: 'bomb', ...EN.balls.bomb },
   split: { ballType: 'split', ...EN.balls.split },
+  giant: { ballType: 'giant', ...EN.balls.giant },
+  chain: { ballType: 'chain', ...EN.balls.chain },
+  bouncy: { ballType: 'bouncy', ...EN.balls.bouncy },
 };
 
 export type Rarity = 'COMMON' | 'RARE' | 'LEGENDARY';
@@ -126,6 +156,12 @@ export interface RelicModifiers {
   ballDamageAdd?: number;
   /** 볼 뒤로 불씨 파티클을 흘린다 (연출) */
   emberTrail?: boolean;
+  /** 특정 볼 타입에만 붙는 대미지 가산 */
+  ballTypeDamageAdd?: Partial<Record<BallType, number>>;
+  /** 새 벽돌이 아이템을 숨길 확률의 배율 */
+  itemDropMul?: number;
+  /** 아이템 중 나쁜 것의 비율의 배율 */
+  itemBadMul?: number;
 }
 
 /**
@@ -142,6 +178,10 @@ export interface RelicContext {
   addCardToDiscard(ball: BallData, temporary?: boolean): void;
   /** 캔버스에 떠오르는 알림 문구를 띄운다. */
   announce(text: string): void;
+  /** 그 자리에서 폭발을 일으킨다 (폭탄 벽돌과 같은 경로 — 연쇄도 된다). */
+  blast(x: number, y: number, radius: number, damage: number): void;
+  /** 지금 날아가는 공 전부와 이번 턴에 갈라져 나올 분신의 대미지를 올린다. 턴이 끝나면 사라진다. */
+  addTurnDamage(amount: number): void;
 }
 
 export interface Relic {
@@ -155,6 +195,8 @@ export interface Relic {
   modifiers?: RelicModifiers;
   /** 웨이브 시작 때마다 이 횟수로 충전되는 1회성 효과 */
   chargesPerWave?: number;
+  /** 한 판에 이 횟수만 — 웨이브가 바뀌어도 다시 차지 않는다 */
+  chargesPerRun?: number;
 
   /** 공이 패들 윗면에 맞을 때 */
   onPaddleHit?(ctx: RelicContext): void;
@@ -166,6 +208,10 @@ export interface Relic {
   onCombo?(ctx: RelicContext, before: number, after: number): void;
   /** 공이 바닥에 닿았을 때. true 를 돌려주면 공을 살려 위로 튕겨낸다. */
   onBallFall?(ctx: RelicContext): boolean;
+  /** 공을 잃어 벽돌이 내려오려 할 때. true 를 돌려주면 이번에는 내려오지 않는다 (새 줄도 안 들어온다). */
+  onDescend?(ctx: RelicContext): boolean;
+  /** 벽돌이 데드라인에 닿아 패배하려는 순간. true 를 돌려주면 아래 몇 줄을 태워 없애고 판을 잇는다. */
+  onDeadline?(ctx: RelicContext): boolean;
 }
 
 /* ------------------------------------------------------------------ */
@@ -181,8 +227,8 @@ export type RewardItem =
 /* Brick                                                               */
 /* ------------------------------------------------------------------ */
 
-/** 일반 / 단단함 / 핵심 / 폭탄 */
-export type BrickType = 'normal' | 'tough' | 'core' | 'bomb';
+/** 일반 / 단단함 / 핵심 / 폭탄 / 보스 코어 (여러 칸을 차지하는 거대 벽돌) */
+export type BrickType = 'normal' | 'tough' | 'core' | 'bomb' | 'boss';
 
 
 /**
@@ -285,6 +331,8 @@ export interface GameState {
   turnsUntilDeadline: number;
   /** 이번 턴에 받은 아이템 id (engine/Items.ts). 턴이 끝나면 비워진다 */
   turnEffects: string[];
+  /** 보스 웨이브의 코어 체력. 보스가 없으면 null */
+  boss: { hp: number; maxHp: number } | null;
 }
 
 export const createInitialGameState = (): GameState => ({
@@ -308,6 +356,7 @@ export const createInitialGameState = (): GameState => ({
   rewardChoices: [],
   turnsUntilDeadline: -1,
   turnEffects: [],
+  boss: null,
 });
 
 /* ------------------------------------------------------------------ */

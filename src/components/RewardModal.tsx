@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { clampBallSpeed } from '../config/balance';
-import { resolveModifiers } from '../engine/Relics';
+import { damageAddFor, resolveModifiers } from '../engine/Relics';
 import type { ResolvedModifiers } from '../engine/Relics';
 import { relicText } from '../i18n/strings';
 import { useStrings } from '../i18n/useStrings';
@@ -74,7 +74,7 @@ function RewardIcon({ item }: { item: RewardItem }) {
 function BallStatLine({ type, mods }: { type: BallType; mods: ResolvedModifiers }) {
   const t = useStrings();
   const stats = BALL_STATS[type];
-  const damage = stats.damage + mods.ballDamageAdd;
+  const damage = stats.damage + damageAddFor(mods, type);
   const speed = Math.round(clampBallSpeed(stats.speed * mods.ballSpeedMul));
   const boosted = 'text-deck-gold';
   return (
@@ -84,6 +84,8 @@ function BallStatLine({ type, mods }: { type: BallType; mods: ResolvedModifiers 
       {stats.pierce ? ` · ${t.reward.statPierce}` : ''}
       {stats.explosionRadius ? ` · ${t.reward.statBlast}` : ''}
       {stats.splitCount ? ` · ${t.reward.statSplit(stats.splitCount + 1)}` : ''}
+      {stats.chainCount ? ` · ${t.reward.statChain(stats.chainCount)}` : ''}
+      {stats.floorBounces ? ` · ${t.reward.statBounce}` : ''}
     </>
   );
 }

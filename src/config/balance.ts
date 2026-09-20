@@ -86,6 +86,12 @@ export const BALANCE = {
       bomb: { radius: 11, speed: 420, damage: 1, pierce: false, explosionRadius: 74, explosionDamage: 2 },
       /** 첫 벽돌에 맞는 순간 splitCount 개의 분신이 좌우 splitAngleDeg 간격으로 갈라져 나온다 */
       split: { radius: 8, speed: 470, damage: 1, pierce: false, splitCount: 2, splitAngleDeg: 28 },
+      /** 크다. 벽돌 사이 간격(8px)보다 훨씬 굵어서 두 벽돌에 걸치면 둘 다 때린다 */
+      giant: { radius: 16, speed: 430, damage: 2, pierce: false },
+      /** 벽돌을 부술 때마다 chainRange 안의 가장 가까운 벽돌 chainCount 개에 번개가 튄다 (chainDamage 씩) */
+      chain: { radius: 8, speed: 460, damage: 1, pierce: false, chainCount: 2, chainRange: 150, chainDamage: 1 },
+      /** 바닥에 닿으면 floorBounces 번까지 스스로 튕겨 오른다 (턴마다 새로) */
+      bouncy: { radius: 8, speed: 500, damage: 1, pierce: false, floorBounces: 1 },
     },
   },
 
@@ -198,6 +204,42 @@ export const BALANCE = {
     flameTrailDamageAdd: 1,
     safetyNetChargesPerWave: 1,
     scrapCycleCombo: 5,
+    /** 행운의 부적: 아이템 드롭 확률 배율 · 나쁜 아이템 비율 배율 */
+    luckyCharmDropMul: 1.5,
+    luckyCharmBadMul: 0.5,
+    /** 강철 심: 기본 구체의 대미지 가산 */
+    ironCoreDamageAdd: 1,
+    /** 철거 장약: 웨이브마다 처음 부수는 벽돌이 이 반경·피해로 터진다 */
+    demolitionChargesPerWave: 1,
+    demolitionRadius: 96,
+    demolitionDamage: 2,
+    /** 닻: 웨이브당 이 횟수만큼, 공을 잃어도 벽돌이 내려오지 않는다 */
+    anchorChargesPerWave: 1,
+    /** 과충전: 한 턴에 이 콤보를 지나치면 날아가는 공 전부 대미지 +N (턴 끝까지) */
+    overchargeCombo: 8,
+    overchargeDamageAdd: 1,
+    /** 불사조 깃털: 한 판에 이 횟수만큼, 데드라인에 닿은 순간 아래 N 줄이 타 없어진다 */
+    phoenixChargesPerRun: 1,
+    phoenixRows: 2,
+  },
+
+  /** 보스 웨이브 — 거대한 코어 벽돌 하나가 포탑과 방벽 뒤에 있다 */
+  boss: {
+    /** 이 배수의 웨이브마다 보스 (5 → 5 · 10웨이브). 0 이면 보스 없음 */
+    everyWaves: 5,
+    /** 코어 크기 (칸 수). 그리드 중앙에 놓인다 */
+    cols: 4,
+    rows: 2,
+    /** 코어 HP = hpBase + hpPerWave × wave */
+    hpBase: 18,
+    hpPerWave: 3,
+    /** 공을 잃어 턴이 끝날 때마다 코어가 회복하는 HP (최대치까지) */
+    regenPerTurn: 2,
+    /** 코어 양옆 포탑 · 바로 아래 방벽 줄의 추가 HP */
+    turretHpBonus: 2,
+    guardHpBonus: 1,
+    /** 보스 웨이브를 클리어한 보상은 이 등급 이상만 나온다 */
+    rewardMinRarity: 'RARE',
   },
 
   score: {
@@ -322,10 +364,26 @@ export function validateBalance(): string[] {
   const total = chance.COMMON + chance.RARE + chance.LEGENDARY;
   if (Math.abs(total - 1) > 1e-9) issues.push(`rewards.rarityChance does not sum to 1: ${total}`);
   if (BALANCE.spawnRow.emptyChanceEnd <= 0) issues.push('spawnRow.emptyChanceEnd must be greater than 0');
-  const { top, height, gap, rows } = BALANCE.bricks.grid;
+  const { top, height, gap, rows, cols } = BALANCE.bricks.grid;
   // 가장 낮게 시작하는 웨이브(startRowDropMax) 기준으로 본다.
   const lowest = top + (rows + BALANCE.waves.startRowDropMax) * (height + gap) - gap;
   const deadline = BALANCE.field.height - BALANCE.paddle.bottomOffset - BALANCE.turn.deadlineOffset;
   if (lowest >= deadline) issues.push('the starting grid already touches the deadline');
+  const boss = BALANCE.boss;
+  if (boss.cols > cols || boss.rows > rows) issues.push('boss core is larger than the grid');
+  if (boss.everyWaves > 0 && boss.everyWaves <= 1) issues.push('boss.everyWaves must be at least 2 (wave 1 is always the standard layout)');
+  const rarities = ['COMMON', 'RARE', 'LEGENDARY'];
+  if (!rarities.includes(boss.rewardMinRarity)) issues.push(`boss.rewardMinRarity is not a rarity: ${boss.rewardMinRarity}`);
   return issues;
+}
+
+/** 이 웨이브가 보스 웨이브인가 (everyWaves 의 배수, 1웨이브 제외) */
+export function isBossWave(wave: number): boolean {
+  const every = BALANCE.boss.everyWaves;
+  return every > 1 && wave >= every && wave % every === 0;
+}
+
+/** 보스 코어의 최대 HP */
+export function bossHp(wave: number): number {
+  return BALANCE.boss.hpBase + BALANCE.boss.hpPerWave * Math.max(0, wave);
 }

@@ -16,6 +16,12 @@ export type SoundName =
   | 'rewardPick'
   | 'itemGood'
   | 'itemBad'
+  | 'zap'
+  | 'floorBounce'
+  | 'relic'
+  | 'bossWave'
+  | 'bossRegen'
+  | 'bossDown'
   | 'gameOver'
   | 'victory'
   | 'newRecord';
@@ -51,6 +57,33 @@ const TONES: Record<Exclude<SoundName, 'explosion'>, Tone[]> = {
   ],
   // 나쁜 아이템: 아래로 미끄러지는 둔탁한 톱니
   itemBad: [{ type: 'sawtooth', from: 300, to: 90, duration: 0.28, gain: 0.4 }],
+  // 연쇄 구체의 번개: 아주 짧고 날카로운 지직
+  zap: [
+    { type: 'square', from: 2200, to: 700, duration: 0.05, gain: 0.28 },
+    { type: 'sawtooth', from: 3000, to: 1100, duration: 0.05, gain: 0.18, delay: 0.02 },
+  ],
+  // 탄성 구체의 바닥 반동: 통통 튀는 삼각파
+  floorBounce: [{ type: 'triangle', from: 240, to: 560, duration: 0.11, gain: 0.42 }],
+  // 유물 발동: 두 번 올라가는 맑은 사인
+  relic: [
+    { type: 'sine', from: 660, to: 990, duration: 0.1, gain: 0.38 },
+    { type: 'sine', from: 990, to: 1320, duration: 0.16, gain: 0.38, delay: 0.08 },
+  ],
+  // 보스 웨이브 예고: 낮게 깔리는 세 박자
+  bossWave: [
+    { type: 'sawtooth', from: 110, to: 110, duration: 0.22, gain: 0.45 },
+    { type: 'sawtooth', from: 82, to: 82, duration: 0.22, gain: 0.45, delay: 0.24 },
+    { type: 'square', from: 62, to: 48, duration: 0.55, gain: 0.4, delay: 0.48 },
+  ],
+  // 보스 회복: 낮은 곳에서 부풀어 오르는 사인
+  bossRegen: [{ type: 'sine', from: 160, to: 300, duration: 0.22, gain: 0.35 }],
+  // 보스 격파: 상승 아르페지오 (폭발 노이즈는 App 이 따로 겹친다)
+  bossDown: [
+    { type: 'triangle', from: 392, to: 392, duration: 0.12, gain: 0.45 },
+    { type: 'triangle', from: 523, to: 523, duration: 0.12, gain: 0.45, delay: 0.1 },
+    { type: 'triangle', from: 659, to: 659, duration: 0.12, gain: 0.45, delay: 0.2 },
+    { type: 'triangle', from: 784, to: 1047, duration: 0.4, gain: 0.45, delay: 0.3 },
+  ],
   gameOver: [
     { type: 'sawtooth', from: 392, to: 370, duration: 0.22, gain: 0.35 },
     { type: 'sawtooth', from: 311, to: 294, duration: 0.22, gain: 0.35, delay: 0.2 },

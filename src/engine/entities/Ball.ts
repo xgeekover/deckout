@@ -24,6 +24,8 @@ export class Ball {
   fallChecked = false;
   /** 아직 분열하지 않은 분열 구체인가. 분신은 다시 갈라지지 않는다. */
   canSplit: boolean;
+  /** 바닥에 닿았을 때 스스로 튕겨 오를 수 있는 남은 횟수 (탄성 구체) */
+  floorBounces: number;
 
   /** 최근 HISTORY_LENGTH 프레임의 위치 큐 (오래된 것이 앞) */
   readonly history: Vec2[] = [];
@@ -40,6 +42,7 @@ export class Ball {
     this.pierce = stats.pierce;
     this.baseSpeed = stats.speed;
     this.canSplit = (stats.splitCount ?? 0) > 0;
+    this.floorBounces = stats.floorBounces ?? 0;
   }
 
   /**
