@@ -123,8 +123,13 @@ export const BALANCE = {
     /** 추가 +1 HP("단단한 벽돌") 확률 = min(perWave × (wave-1), max) */
     toughChancePerWave: 0.12,
     toughChanceMax: 0.6,
-    /** 이 웨이브를 클리어하면 VICTORY */
+    /** 이 웨이브를 클리어하면 VICTORY. 승리 화면에서 "계속하기"를 고르면 그 다음 웨이브부터 무한 모드다 */
     victoryWave: 10,
+    /**
+     * 무한 모드(승리 웨이브 이후)의 벽돌 HP 보너스 증가폭(웨이브당). 승리 웨이브까지의 hpPerWave 를 그대로 이어 가면
+     * 20웨이브에 벽돌 하나가 15 HP 를 넘어 "위험해지는" 게 아니라 "늘어지기만" 한다. 증원 한도도 승리 웨이브 값에서 멈춘다.
+     */
+    endlessHpPerWave: 0.35,
   },
 
   /** 턴 정산 때 상단에 새로 들어오는 행 */
@@ -277,9 +282,15 @@ export const BALANCE = {
 /* 스케일링 공식                                                        */
 /* ------------------------------------------------------------------ */
 
-/** 웨이브에 따라 모든 벽돌에 더해지는 HP: floor((wave - 1) × hpPerWave) */
+/**
+ * 웨이브에 따라 모든 벽돌에 더해지는 HP: floor((wave - 1) × hpPerWave).
+ * 승리 웨이브를 넘어서면(무한 모드) 그 뒤로는 웨이브당 endlessHpPerWave 씩만 오른다.
+ */
 export function waveHpBonus(wave: number): number {
-  return Math.floor(Math.max(0, wave - 1) * BALANCE.waves.hpPerWave);
+  const { hpPerWave, victoryWave, endlessHpPerWave } = BALANCE.waves;
+  const base = Math.min(Math.max(0, wave - 1), Math.max(0, victoryWave - 1));
+  const beyond = Math.max(0, wave - victoryWave);
+  return Math.floor(base * hpPerWave + beyond * endlessHpPerWave);
 }
 
 /** 이 웨이브의 초기 배치를 몇 줄 아래에서 시작하는가 */
@@ -300,10 +311,11 @@ export function bombBrickChance(turn: number): number {
   return Math.min(chanceBase + chancePerTurn * Math.max(0, turn), chanceMax);
 }
 
-/** 이 웨이브에 들어올 수 있는 새 줄의 총수 */
+/** 이 웨이브에 들어올 수 있는 새 줄의 총수. 무한 모드에서는 승리 웨이브 값에서 멈춘다 (웨이브가 길어지지 않게) */
 export function reinforcementBudget(wave: number): number {
   const { base, perWave } = BALANCE.spawnRow.reinforcements;
-  return Math.max(0, Math.floor(base + perWave * Math.max(0, wave - 1)));
+  const w = Math.min(wave, BALANCE.waves.victoryWave);
+  return Math.max(0, Math.floor(base + perWave * Math.max(0, w - 1)));
 }
 
 /** 신규 행 난이도 0~1. 웨이브 진행이 주도하고, 한 웨이브를 오래 끌면 조금 더 오른다. */
@@ -369,6 +381,7 @@ export function validateBalance(): string[] {
   const lowest = top + (rows + BALANCE.waves.startRowDropMax) * (height + gap) - gap;
   const deadline = BALANCE.field.height - BALANCE.paddle.bottomOffset - BALANCE.turn.deadlineOffset;
   if (lowest >= deadline) issues.push('the starting grid already touches the deadline');
+  if (BALANCE.waves.endlessHpPerWave < 0) issues.push('waves.endlessHpPerWave must not be negative');
   const boss = BALANCE.boss;
   if (boss.cols > cols || boss.rows > rows) issues.push('boss core is larger than the grid');
   if (boss.everyWaves > 0 && boss.everyWaves <= 1) issues.push('boss.everyWaves must be at least 2 (wave 1 is always the standard layout)');

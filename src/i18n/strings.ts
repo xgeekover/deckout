@@ -102,6 +102,8 @@ export interface Strings {
     chargesLeftRun: (left: number, total: number) => string;
     /** 보스 웨이브의 코어 체력 라벨 */
     bossCore: string;
+    /** 무한 모드 안내 (웨이브 칸 아래) */
+    endless: string;
     comboBest: (n: number) => string;
     comboUnit: string;
     untilDeadline: string;
@@ -147,6 +149,8 @@ export interface Strings {
     pickOrSkip: string;
     keyboardAria: string;
     touchAria: string;
+    /** 승리 화면의 터치 안내 */
+    continueOrRetry: string;
   };
 
   reward: {
@@ -181,6 +185,10 @@ export interface Strings {
     relics: (n: number) => string;
     noRelics: string;
     retryHint: string;
+    /** 승리 화면의 "계속하기" 버튼과 그 설명 */
+    continueEndless: string;
+    continueHint: string;
+    endlessNote: string;
   };
 
   app: {
@@ -342,6 +350,7 @@ const en: Strings = {
     chargesLeft: (left, total) => `Uses left this wave: ${left} / ${total}`,
     chargesLeftRun: (left, total) => `Uses left this run: ${left} / ${total}`,
     bossCore: `Boss core — heals ${BOSS_REGEN} every time you lose a ball`,
+    endless: `Endless mode — no last wave. A boss every ${BALANCE.boss.everyWaves} waves.`,
     comboBest: (n) => `Best ${n}`,
     comboUnit: 'hits in a row',
     untilDeadline: 'Until deadline',
@@ -385,6 +394,7 @@ const en: Strings = {
     pickOrSkip: 'Pick a card · skip',
     keyboardAria: 'Keyboard controls',
     touchAria: 'Touch controls',
+    continueOrRetry: 'Continue (endless) or try again',
   },
 
   reward: {
@@ -419,6 +429,9 @@ const en: Strings = {
     relics: (n) => `Relics · ${n}`,
     noRelics: 'No relics this run.',
     retryHint: '(Press R or click)',
+    continueEndless: 'Continue — endless mode',
+    continueHint: '(Enter or click)',
+    endlessNote: `Wave ${BALANCE.waves.victoryWave} is cleared and this win is already on your records. Continue and the run goes on with no last wave — every brick keeps getting tougher, and a boss returns every ${BALANCE.boss.everyWaves} waves. How far can you get?`,
   },
 
   app: {
@@ -570,6 +583,7 @@ const ko: Strings = {
     chargesLeft: (left, total) => `이번 웨이브 남은 횟수 ${left} / ${total}`,
     chargesLeftRun: (left, total) => `이번 판 남은 횟수 ${left} / ${total}`,
     bossCore: `보스 코어 — 공을 잃을 때마다 ${BOSS_REGEN} 회복`,
+    endless: `무한 모드 — 마지막 웨이브가 없습니다. 보스는 ${BALANCE.boss.everyWaves}웨이브마다.`,
     comboBest: (n) => `최고 ${n}`,
     comboUnit: '연속 타격',
     untilDeadline: '데드라인까지',
@@ -613,6 +627,7 @@ const ko: Strings = {
     pickOrSkip: '카드 선택 · 스킵',
     keyboardAria: '키보드 조작 가이드',
     touchAria: '터치 조작 가이드',
+    continueOrRetry: '계속하기(무한 모드) 또는 재도전',
   },
 
   reward: {
@@ -647,6 +662,9 @@ const ko: Strings = {
     relics: (n) => `유물 · ${n}개`,
     noRelics: '이번 판에서는 유물을 얻지 못했습니다.',
     retryHint: '(R 키 또는 클릭)',
+    continueEndless: '계속하기 — 무한 모드',
+    continueHint: '(Enter 또는 클릭)',
+    endlessNote: `${BALANCE.waves.victoryWave}웨이브를 깼고 이 승리는 이미 기록에 남았습니다. 계속하면 마지막 웨이브 없이 이어집니다 — 벽돌은 계속 단단해지고 보스는 ${BALANCE.boss.everyWaves}웨이브마다 돌아옵니다. 어디까지 갈 수 있을까요?`,
   },
 
   app: {

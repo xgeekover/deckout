@@ -11,6 +11,8 @@ interface GameOverModalProps {
   /** 이번 판을 기록에 반영한 결과. 저장 전이면 null. */
   update: RecordUpdate | null;
   onRestart: () => void;
+  /** 승리 화면에서만: 무한 모드로 이어 가기. 없으면 재도전 버튼만 보인다 */
+  onContinue?: () => void;
 }
 
 /** 폭죽 한 발의 위치/색/지연. 렌더마다 같아야 하므로 난수 대신 고정 테이블을 쓴다. */
@@ -79,19 +81,20 @@ function StatTile({ label, value, highlight }: { label: string; value: string; h
 }
 
 /** 게임 오버 / 승리 결과창. 통계 · 최종 덱 · 유물 · 최고 기록 갱신 여부를 보여준다. */
-export function GameOverModal({ summary, update, onRestart }: GameOverModalProps) {
+export function GameOverModal({ summary, update, onRestart, onContinue }: GameOverModalProps) {
   const t = useStrings();
-  const restartRef = useRef<HTMLButtonElement>(null);
+  const primaryRef = useRef<HTMLButtonElement>(null);
   // 버튼에 자동 포커스를 주기 때문에, 발사하려던 Space 연타가 결과창을 보기도 전에 재시작시킬 수 있다.
   const isArmed = useActivationGrace(600);
   const victory = summary.outcome === 'victory';
+  const canContinue = victory && onContinue !== undefined;
   const newScore = update?.isNewHighScore ?? false;
   const newWave = update?.isNewMaxWave ?? false;
   const anyRecord = newScore || newWave;
 
-  // 버튼에 포커스를 줘서 Enter/Space 로도 바로 재도전할 수 있게 한다 (R 은 InputManager 가 받는다).
+  // 주 버튼(승리면 "계속하기", 아니면 재도전)에 포커스를 줘서 Enter/Space 로도 바로 진행할 수 있게 한다 (R 은 InputManager 가 받는다).
   useEffect(() => {
-    restartRef.current?.focus();
+    primaryRef.current?.focus();
   }, []);
 
   return (
@@ -107,7 +110,7 @@ export function GameOverModal({ summary, update, onRestart }: GameOverModalProps
         <p
           className={`text-xs uppercase tracking-[0.3em] ${victory ? 'text-emerald-300' : 'text-rose-400'}`}
         >
-          {victory ? 'run complete' : 'run ended'}
+          {victory ? 'run complete' : summary.endless ? 'endless run ended' : 'run ended'}
         </p>
         <h2
           className={`mt-1 text-4xl font-black tracking-tight ${victory ? 'text-emerald-300' : 'text-rose-400'}`}
@@ -191,16 +194,42 @@ export function GameOverModal({ summary, update, onRestart }: GameOverModalProps
           </section>
         </div>
 
-        <button
-          ref={restartRef}
-          type="button"
-          onClick={() => {
-            if (isArmed()) onRestart();
-          }}
-          className="mt-6 rounded-xl border border-deck-accent bg-deck-accent/10 px-7 py-2.5 text-sm font-semibold text-deck-accent transition hover:bg-deck-accent hover:text-deck-bg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-deck-accent"
-        >
-          {t.common.retry} <span className="ml-1 text-xs font-normal opacity-70">{t.result.retryHint}</span>
-        </button>
+        {canContinue && (
+          <p data-testid="endless-note" className="mt-5 text-xs leading-relaxed text-slate-400">
+            {t.result.endlessNote}
+          </p>
+        )}
+
+        <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+          {canContinue && (
+            <button
+              ref={primaryRef}
+              type="button"
+              data-testid="continue-endless"
+              onClick={() => {
+                if (isArmed()) onContinue();
+              }}
+              className="rounded-xl border border-emerald-400 bg-emerald-400/10 px-7 py-2.5 text-sm font-semibold text-emerald-300 transition hover:bg-emerald-400 hover:text-deck-bg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-400"
+            >
+              {t.result.continueEndless} <span className="ml-1 text-xs font-normal opacity-70">{t.result.continueHint}</span>
+            </button>
+          )}
+          <button
+            ref={canContinue ? undefined : primaryRef}
+            type="button"
+            data-testid="retry"
+            onClick={() => {
+              if (isArmed()) onRestart();
+            }}
+            className={
+              canContinue
+                ? 'rounded-xl border border-deck-edge px-5 py-2.5 text-sm text-slate-300 transition hover:border-deck-accent hover:text-deck-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-deck-accent'
+                : 'rounded-xl border border-deck-accent bg-deck-accent/10 px-7 py-2.5 text-sm font-semibold text-deck-accent transition hover:bg-deck-accent hover:text-deck-bg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-deck-accent'
+            }
+          >
+            {t.common.retry} <span className="ml-1 text-xs font-normal opacity-70">{t.result.retryHint}</span>
+          </button>
+        </div>
       </div>
     </div>
   );

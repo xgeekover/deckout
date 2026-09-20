@@ -333,6 +333,8 @@ export interface GameState {
   turnEffects: string[];
   /** 보스 웨이브의 코어 체력. 보스가 없으면 null */
   boss: { hp: number; maxHp: number } | null;
+  /** 승리 웨이브를 넘겨 무한 모드로 이어 가는 중인가 */
+  endless: boolean;
 }
 
 export const createInitialGameState = (): GameState => ({
@@ -357,6 +359,7 @@ export const createInitialGameState = (): GameState => ({
   turnsUntilDeadline: -1,
   turnEffects: [],
   boss: null,
+  endless: false,
 });
 
 /* ------------------------------------------------------------------ */
@@ -373,4 +376,6 @@ export interface RunSummary {
   bricksDestroyed: number;
   deck: DeckCard[];
   relics: Relic[];
+  /** 승리 뒤 무한 모드로 이어 간 판인가 */
+  endless: boolean;
 }

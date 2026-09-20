@@ -125,6 +125,10 @@ export interface EngineHooks {
   onBossRegen?: (amount: number) => void;
   /** 보스 코어를 부쉈을 때 */
   onBossDefeated?: () => void;
+  /** 새 판이 시작될 때 (첫 판 포함 — 단, 훅을 등록하기 전의 첫 reset 은 못 받는다) */
+  onRunStart?: () => void;
+  /** 승리 화면에서 무한 모드로 이어 가기를 골랐을 때 */
+  onContinue?: (wave: number) => void;
   /** 공이 바닥을 완전히 벗어났을 때 */
   onBallLost?: (turn: number) => void;
   /** 턴 정산(벽돌 하강 + 신규 행 스폰)이 끝났을 때 */
@@ -232,6 +236,8 @@ export class GameEngine {
   private turnEffects: TurnEffects = freshTurnEffects();
   /** 지금 그려지고 있는 번개 줄기들 */
   private bolts: Bolt[] = [];
+  /** 승리 웨이브를 넘겨 이어 가는 중 — 이때는 웨이브를 비워도 VICTORY 로 가지 않는다 */
+  private endless = false;
   private particles = new ParticleSystem();
   private floating = new FloatingTextSystem(GAME_WIDTH);
   private shake = new ScreenShake();
@@ -425,6 +431,20 @@ export class GameEngine {
     this.advanceWave();
   }
 
+  /**
+   * 승리 화면에서 판을 잇는다 — 무한 모드. 승리는 이미 기록됐고, 지금 비운 웨이브의 보상을 받은 뒤
+   * 다음 웨이브부터 마지막 웨이브 없이 이어진다 (보스는 계속 5의 배수마다).
+   */
+  continueRun(): void {
+    if (this.state.phase !== 'VICTORY') return;
+    this.endless = true;
+    this.stopDelay = 0;
+    if (!this.running) this.start(); // 승리 연출 뒤 멈춘 루프를 다시 돌린다
+    this.patchState({ endless: true });
+    this.offerRewards(this.state.wave);
+    this.hooks.onContinue?.(this.state.wave);
+  }
+
   /** 지금까지의 판 요약. 끝난 판이면 결과, 진행 중이면 중간 집계. */
   getRunSummary(): RunSummary {
     const phase = this.state.phase;
@@ -437,6 +457,7 @@ export class GameEngine {
       bricksDestroyed: this.bricksDestroyed,
       deck: this.deck,
       relics: this.relics,
+      endless: this.endless,
     };
   }
 
@@ -516,6 +537,7 @@ export class GameEngine {
     this.brickRects = [];
     this.drops = [];
     this.bolts = [];
+    this.endless = false;
     this.turnEffects = freshTurnEffects();
     this.state = { ...createInitialGameState(), deck: this.deck };
     this.aimAngle = -Math.PI / 2;
@@ -538,6 +560,7 @@ export class GameEngine {
     this.scoreBuffer = 0;
     this.destroyedBuffer = false;
     this.notify();
+    this.hooks.onRunStart?.();
     this.startWave();
   }
 
@@ -598,6 +621,11 @@ export class GameEngine {
       this.floating.spawnBanner(GAME_WIDTH / 2, GAME_HEIGHT * 0.53, 'BOSS WAVE', '#e879f9');
       this.shake.shake(...SHAKE.explosion);
       this.hooks.onBossWave?.(wave);
+    }
+
+    // 무한 모드의 첫 웨이브 — 보상 배너 위에 한 줄 더
+    if (this.endless && wave === VICTORY_WAVE + 1) {
+      this.floating.spawnBanner(GAME_WIDTH / 2, this.paddle.y - 165, 'ENDLESS MODE', '#7ef0a8');
     }
   }
 
@@ -921,38 +949,36 @@ export class GameEngine {
     const wave = this.state.wave;
     // 카드를 아낄수록 보너스
     const bonus = BALANCE.score.waveClear + this.drawPile.length * BALANCE.score.perUnusedCard;
+    this.patchState({
+      currentCard: null,
+      score: this.state.score + bonus,
+      bricksRemaining: 0,
+      turnsUntilDeadline: -1,
+      discardPileCount: this.discardPile.length,
+      turn: { ...this.state.turn, canLaunch: false },
+      boss: null,
+    });
 
-    if (wave >= VICTORY_WAVE) {
-      this.patchState({
-        phase: 'VICTORY',
-        currentCard: null,
-        score: this.state.score + bonus,
-        bricksRemaining: 0,
-        turnsUntilDeadline: -1,
-        discardPileCount: this.discardPile.length,
-        turn: { ...this.state.turn, canLaunch: false },
-      });
+    // 승리 웨이브를 비우면 판이 끝난다 — 무한 모드로 이어 가는 중이 아니라면 (continueRun 참고)
+    if (wave >= VICTORY_WAVE && !this.endless) {
+      this.patchState({ phase: 'VICTORY' });
       this.stopDelay = TERMINAL_SETTLE_SECONDS;
       this.hooks.onWaveClear?.([], wave);
       this.hooks.onVictory?.(this.getRunSummary());
       return;
     }
 
+    const rewards = this.offerRewards(wave);
+    this.hooks.onWaveClear?.(rewards, wave);
+  }
+
+  /** 방금 비운 웨이브의 보상 3장을 추첨해 보상 화면으로 들어간다. */
+  private offerRewards(wave: number): RewardItem[] {
     // 보스를 깬 보상은 등급 하한이 있다 (COMMON 은 나오지 않는다)
     const minRarity: Rarity = isBossWave(wave) ? (BALANCE.boss.rewardMinRarity as Rarity) : 'COMMON';
     const rewards = rollRewards(new Set(this.relics.map((r) => r.id)), wave, BALANCE.rewards.choices, Math.random, minRarity);
-    this.patchState({
-      phase: 'REWARD',
-      currentCard: null,
-      rewardChoices: rewards,
-      boss: null,
-      score: this.state.score + bonus,
-      bricksRemaining: 0,
-      turnsUntilDeadline: -1,
-      discardPileCount: this.discardPile.length,
-      turn: { ...this.state.turn, canLaunch: false },
-    });
-    this.hooks.onWaveClear?.(rewards, wave);
+    this.patchState({ phase: 'REWARD', rewardChoices: rewards });
+    return rewards;
   }
 
   /* ---------------------------------------------------------------- */

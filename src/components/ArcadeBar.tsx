@@ -97,7 +97,7 @@ function ScoreFields({ state, records, compact }: { state: GameState; records: R
       {!compact && (
         <Field label={t.arcade.hiScore} value={pad(hi)} tone={state.score >= hi && state.score > 0 ? 'text-deck-gold' : 'text-slate-300'} />
       )}
-      <Field label={t.arcade.wave} value={pad(state.wave, 2)} tone="text-deck-gold" />
+      <Field label={t.arcade.wave} value={pad(state.wave, 2)} tone={state.endless ? 'text-emerald-300' : 'text-deck-gold'} />
       <Field label={t.arcade.combo} value={`x${state.combo}`} tone={state.combo >= 3 ? 'text-deck-gold' : 'text-slate-100'} />
       {!compact && <Field label={t.arcade.turn} value={pad(state.turn.currentTurn, 2)} />}
       <Field

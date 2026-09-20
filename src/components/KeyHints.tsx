@@ -24,8 +24,9 @@ function keyboardHints(t: Strings, phase: GamePhase, isMuted: boolean): Hint[] {
         { keys: ['0', 'S'], label: t.hints.skip },
         mute,
       ];
-    case 'GAME_OVER':
     case 'VICTORY':
+      return [{ keys: ['Enter'], label: t.result.continueEndless }, { keys: ['R'], label: t.common.retry }, mute];
+    case 'GAME_OVER':
       return [{ keys: ['R'], label: t.common.retry }, mute];
     case 'AIMING':
       return [
@@ -48,8 +49,9 @@ function touchHints(t: Strings, phase: GamePhase): Hint[] {
   switch (phase) {
     case 'REWARD':
       return [{ keys: [t.hints.tap], label: t.hints.pickOrSkip }];
-    case 'GAME_OVER':
     case 'VICTORY':
+      return [{ keys: [t.hints.tap], label: t.hints.continueOrRetry }];
+    case 'GAME_OVER':
       return [{ keys: [t.hints.tap], label: t.common.retry }];
     case 'AIMING':
       return [

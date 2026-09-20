@@ -36,6 +36,8 @@ export default function App() {
   const [settings, setSettings] = useState<Settings>(loadSettings);
   const [records, setRecords] = useState<Records>(loadRecords);
   const [runEnd, setRunEnd] = useState<RunEnd | null>(null);
+  /** 이번 판에서 이미 누적 기록에 더한 파괴 수. 무한 모드에서는 한 판이 두 번 끝나므로(승리 → 게임 오버) 증가분만 더한다 */
+  const recordedBricksRef = useRef(0);
 
   // 사운드는 렌더와 무관한 장수 객체라 state 의 지연 초기화로 한 번만 만든다.
   // 음소거 여부는 아래 effect 가 설정값과 동기화한다.
@@ -94,13 +96,17 @@ export default function App() {
       engineRef.current = engine;
       if (!engine) return;
 
-      /** 끝난 판을 기록에 반영한다. 엔진이 판당 정확히 한 번만 부르므로 중복 집계가 없다. */
+      /**
+       * 끝난 판을 기록에 반영한다. 보통은 판당 한 번이지만, 승리 뒤 무한 모드로 이어 가면 같은 판이 게임 오버로 한 번 더 끝난다
+       * — 최고 점수·웨이브는 "더 클 때만" 갱신되니 그대로 두고, 누적 파괴 수만 지난 집계 이후의 증가분으로 더한다.
+       */
       const finishRun = (summary: RunSummary) => {
         const update = submitRun({
           score: summary.score,
           wave: summary.wave,
-          bricksDestroyed: summary.bricksDestroyed,
+          bricksDestroyed: summary.bricksDestroyed - recordedBricksRef.current,
         });
+        recordedBricksRef.current = summary.bricksDestroyed;
         setRecords(update.records);
         setRunEnd({ summary, update });
         sound.play(summary.outcome === 'victory' ? 'victory' : 'gameOver');
@@ -132,6 +138,10 @@ export default function App() {
         },
         onGameOver: finishRun,
         onVictory: finishRun,
+        onRunStart: () => {
+          recordedBricksRef.current = 0;
+        },
+        onContinue: () => sound.play('rewardPick'),
       });
     },
     [sound],
@@ -151,11 +161,19 @@ export default function App() {
     // 끝난 판은 이미 submitRun 으로 집계됐다. 진행 중인 판을 버리는 경우에만
     // 그동안 파괴한 벽돌을 누적 기록에 더해 준다.
     const summary = engine.getRunSummary();
-    if (summary.outcome === 'in-progress' && summary.bricksDestroyed > 0) {
-      setRecords(addBricksDestroyed(summary.bricksDestroyed));
+    const unrecorded = summary.bricksDestroyed - recordedBricksRef.current;
+    if (summary.outcome === 'in-progress' && unrecorded > 0) {
+      setRecords(addBricksDestroyed(unrecorded));
     }
     sound.unlock();
     engine.restart();
+  }, [sound]);
+
+  /** 승리 화면 → 무한 모드. 결과창을 내리고 엔진이 보상 화면으로 이어 간다. */
+  const handleContinue = useCallback(() => {
+    sound.unlock();
+    setRunEnd(null);
+    engineRef.current?.continueRun();
   }, [sound]);
 
   /*
@@ -233,7 +251,12 @@ export default function App() {
             )}
 
             {isOver && runEnd && (
-              <GameOverModal summary={runEnd.summary} update={runEnd.update} onRestart={handleRestart} />
+              <GameOverModal
+                summary={runEnd.summary}
+                update={runEnd.update}
+                onRestart={handleRestart}
+                onContinue={runEnd.summary.outcome === 'victory' ? handleContinue : undefined}
+              />
             )}
 
             {/* 세로로 든 폰: 캔버스 아래가 비므로 가로 회전(과 아이폰의 홈 화면 실행) 안내를 둔다 */}

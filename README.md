@@ -20,6 +20,7 @@ No install. Works on desktop (mouse · keyboard) and on phones (touch). Records 
 - **Deckbuilding** — clear a wave to pick one of three rewards. Grow your deck with new ball cards (Basic · Heavy · Pierce · Bomb · Split · Giant · Chain · Bouncy) or take a passive relic.
 - **10 relics** — 🏓 Wide Paddle · 🍀 Lucky Charm · 🔩 Iron Core · 🔥 Flame Trail · 🕸️ Safety Net · 💥 Demolition Charge · ⚓ Anchor · 🔋 Overcharge · ♻️ Scrap Cycle · 🪶 Phoenix Feather.
 - **Boss waves** — on waves 5 and 10 a four-cell-wide core sits behind turrets and a guard wall, heals every time you lose a ball, and shows its own health bar. Beating it rolls rewards of RARE or better only.
+- **Endless mode** — clearing wave 10 wins the run and records it; choose *Continue* on the victory screen and the run goes on with no last wave. Bricks keep getting tougher (more slowly), a boss returns every 5 waves, and the best wave you reach goes on your records.
 - **Items hidden in bricks** — some bricks drop a capsule when they break; catch it with the paddle and it applies on the spot. Five good (WIDE · x3 · SLOW · PWR · SHIELD), three bad (NARROW · FAST · DOWN). Everything lasts only until you lose the ball.
 - **6 wave patterns** — Standard · Checkerboard · Inverted Triangle · Shield Wall · Diamond · Columns. HP and the share of tough bricks rise with each wave.
 - **Game feel** — particles, screen shake, hit-stop, ball trails, combo popups, chained bomb explosions, synthesized WebAudio sound effects.
@@ -65,7 +66,7 @@ Before launch the ball sits on the paddle, and **the aim line tilts in the direc
 
 ## How a run plays out
 
-A run is one attempt from wave 1 to wave 10 — about 15–20 minutes at a steady pace. There is no mid-run save: close the tab and the run is gone; only your records stay.
+A run is one attempt from wave 1 to wave 10 — about 15–20 minutes at a steady pace — plus as long as you last if you continue into endless mode afterwards. There is no mid-run save: close the tab and the run is gone; only your records stay.
 
 **1. Start.** You begin with the starting deck — Basic Ball ×4, Heavy Ball ×1 — and wave 1's Standard layout: 40 bricks in five rows, the top two rows tougher (2 HP) than the bottom three (1 HP).
 
@@ -86,7 +87,9 @@ The `DEADLINE` number on the score line is how many more turns you have before t
 
 **6. Waves 6–9.** Diamond → Columns → Checkerboard → Inverted Triangle, starting two rows lower from wave 7. By now you have taken five rewards — usually a deck of 7–10 cards and two or three relics — and runs are decided by whether that deck can clear a row faster than rows come down.
 
-**7. Wave 10 — final boss.** The core has 48 HP, every brick carries +6 HP, and the layout starts three rows lower: five turns of slack. Clear it and the run is a **victory**.
+**7. Wave 10 — final boss.** The core has 48 HP, every brick carries +6 HP, and the layout starts three rows lower: five turns of slack. Clear it and the run is a **victory** — recorded on the spot.
+
+**8. Endless mode (optional).** The victory screen offers *Continue* (Enter). Your win is already on your records; the run carries on from wave 11 with no last wave. Bricks keep gaining HP but more slowly (+0.35 per wave instead of +0.75), the reinforcement budget stays at 14 rows, a boss returns every 5 waves (63 HP on wave 15, 78 on wave 20, healing 2 per lost ball as ever), and once every relic is yours the rewards are balls only. It ends like any run — at the deadline — and the best wave you reach goes on your records.
 
 **Losing.** A brick touching the deadline ends the run on any wave (Phoenix Feather buys one reprieve per run). The results screen shows the wave, score, best combo and bricks destroyed with your final deck and relics, updates your records (high score · best wave · total bricks), and `R` starts the next run.
 
@@ -106,7 +109,7 @@ The `DEADLINE` number on the score line is how many more turns you have before t
 2. Each turn draws one card and puts that ball on the paddle. The aim line tilts with the paddle's movement; launching sends the ball into the field.
 3. When the ball (or, after a split, **every** ball) has fully left the bottom, the turn ends — the used card goes to the discard pile, and **every remaining brick drops one row while a new row enters at the top.** New rows arrive only up to a per-wave budget (the reinforcement budget: 5 rows on wave 1, +1 per wave); the descent continues after that. When the draw pile is empty the discard pile is reshuffled into it.
 4. If the bottom of a brick reaches the **deadline** (40px above the paddle), the game is over. From the starting layout, doing nothing gets you there in 8 turns.
-5. Destroy every brick on the field to clear the wave → choose one of three rewards (a ball or a relic; you may skip) → next wave. Waves 5 and 10 are **boss waves**. Clear wave 10 to win.
+5. Destroy every brick on the field to clear the wave → choose one of three rewards (a ball or a relic; you may skip) → next wave. Waves 5 and 10 are **boss waves**. Clear wave 10 to win — then, if you like, continue into **endless mode**, where the run only ends at the deadline.
 
 Combo rises with every brick hit, **is not broken by paddle bounces**, and resets to 0 only when you lose the ball. Score is brick max HP × 100, plus 500 per wave clear and 120 for each card left in the draw pile.
 
@@ -161,7 +164,7 @@ Rarity odds are COMMON 70% · RARE 25% · LEGENDARY 5%. Among the three cards at
 
 ### Boss wave
 
-Every 5th wave (5 and 10) uses the boss layout: a **core** four cells wide and two rows tall in the top center, a turret (+2 HP) on each side of its lower row, a full guard row (+1 HP) under it, then a checkerboard. The core's HP is `18 + 3 × wave` (33 on wave 5, 48 on wave 10); it is drawn purple with a pulsing glow and a big number, and a health bar sits at the top of the playfield with a `BOSS` field on the score line. **Every time you lose a ball, the core heals 2** — a rally that stops short is partly undone, so the wave rewards finishing what you start. The core is an ordinary brick in every other respect: it descends with the rest, takes explosion and lightning damage, and reaching the deadline with it ends the run. It hides no item. Destroying it gives max HP × 100 points and, when it is the last brick, ends the wave with `CORE DOWN`.
+Every 5th wave (5 and 10 — and 15, 20 … in endless mode) uses the boss layout: a **core** four cells wide and two rows tall in the top center, a turret (+2 HP) on each side of its lower row, a full guard row (+1 HP) under it, then a checkerboard. The core's HP is `18 + 3 × wave` (33 on wave 5, 48 on wave 10); it is drawn purple with a pulsing glow and a big number, and a health bar sits at the top of the playfield with a `BOSS` field on the score line. **Every time you lose a ball, the core heals 2** — a rally that stops short is partly undone, so the wave rewards finishing what you start. The core is an ordinary brick in every other respect: it descends with the rest, takes explosion and lightning damage, and reaching the deadline with it ends the run. It hides no item. Destroying it gives max HP × 100 points and, when it is the last brick, ends the wave with `CORE DOWN`.
 
 Bot measurement (same bots as in "Wave scaling"): for the average bot the boss wave's clear rate (57–77% across two batches) sits between wave 4 (43–75%) and wave 6 (100%), and for the expert bot it takes fewer turns (median 5.5) than waves 4 and 6 (9.5 / 8.5) — the layout has fewer cells than a normal wave, and the core is one big target. So the boss is a change of texture, not a difficulty cliff. `BALANCE.boss` holds all of it: `everyWaves` · `hpBase` · `hpPerWave` · `regenPerTurn` · the turret/guard bonuses · `rewardMinRarity`.
 
@@ -254,7 +257,7 @@ AIMING ──────────▶ PLAYING ──────────�
 - **PLAYING** — when the ball has **fully** left the bottom (`y - radius > canvasHeight`), the `onBallLost` hook fires and turn resolution begins.
 - **TURN_RESOLVING** — every remaining brick moves down one row (`height + gap` = 36px) and a new row slides into the vacated top row. A 0.34s ease-out, during which the paddle can still move. The turn counter goes up by 1 when it completes.
 - **GAME_OVER** — entered if, right after the descent, the bottom of a brick touches the deadline (40px above the paddle, y=536). The `onGameOver(summary)` hook fires and React's `GameOverModal` shows the results. The loop stops 0.7s later so shake and particles can finish.
-- **VICTORY** — clearing the target wave (`VICTORY_WAVE = 10`). The spec did not define a win condition, so this is an arbitrary value, adjustable through one constant.
+- **VICTORY** — clearing the target wave (`VICTORY_WAVE = 10`). The spec did not define a win condition, so this is an arbitrary value, adjustable through one constant. It is terminal unless `continueRun()` is called, which goes back to REWARD with the engine's `endless` flag set — from then on `clearWave()` never returns here.
 
 ### Making sure a turn always ends
 
@@ -357,6 +360,8 @@ If `setGridConfig` makes the grid very small (say 2×2), a pattern like Diamond 
 | Expected HP of one new row | 7.3 | 8.1 | 8.9 | 9.8 | 10.6 | 13.4 | 16.4 | 17.6 | 18.7 | 23.0 |
 
 Base HP per row, from the top, is `2, 2, 1, 1, 1`.
+
+**Endless mode.** Past the victory wave, `waveHpBonus` grows by `endlessHpPerWave = 0.35` per wave instead of 0.75 (+7 on wave 11, +10 on wave 20, +13 on wave 30), and `reinforcementBudget` stays at the wave-10 value (14 rows), so later waves get harder through HP and deadline pressure rather than length. The start-row drop (max 3), tough-brick chance (max 60%) and new-row difficulty are already at their caps by wave 10; boss HP keeps rising (`18 + 3 × wave`).
 
 #### Why these numbers (bot measurements)
 
@@ -465,13 +470,16 @@ engine.setHooks({
   onTurnEnd: (turn) => {},                    // descent resolved
   onWaveClear: (rewards, wave) => {},         // the three rewards rolled
   onRewardResolved: (picked) => {},           // null on skip
-  onGameOver: (summary) => {},                // RunSummary: wave · score · combo · bricks · deck · relics
+  onGameOver: (summary) => {},                // RunSummary: wave · score · combo · bricks · deck · relics · endless
   onVictory: (summary) => {},
+  onRunStart: () => {},                       // every new run (restart)
+  onContinue: (wave) => {},                   // victory screen → endless mode
 });
 engine.setGridConfig({ rows: 6, cols: 10 }); // applies from the next wave
+engine.continueRun();                        // only in VICTORY: rolls the wave-10 reward and carries on endlessly
 ```
 
-`src/App.tsx` uses these hooks to play sound effects, and in `onGameOver` / `onVictory` saves the records and then shows the results.
+`src/App.tsx` uses these hooks to play sound effects, and in `onGameOver` / `onVictory` saves the records and then shows the results. In endless mode the same run ends twice (victory, then game over), so `App` adds only the bricks destroyed *since the last submission* to the all-time total, and `onRunStart` resets that baseline.
 
 ## How this was verified
 
@@ -493,5 +501,5 @@ There is no test runner yet. Instead, three things were run at every step.
 - If two tabs finish a run within about 1ms of each other, their record writes can overwrite one another (read-modify-write). It is practically impossible to happen naturally, so it was left alone. Record updates from other tabs reach the HUD through the `storage` event.
 - The sound effects are synthesized and have not been tuned by ear. Bricks destroyed in a run in progress are not added to the total if you just close the page.
 - Some numbers, such as `VICTORY_WAVE = 10`, are arbitrary — all of them are adjusted in `src/config/balance.ts`.
-- The boss wave and the second batch of balls and relics were tuned with bots only (see "Boss wave"); whether a core that heals 2 per lost ball feels fair to a person is unknown.
+- The boss wave and the second batch of balls and relics were tuned with bots only (see "Boss wave"); whether a core that heals 2 per lost ball feels fair to a person is unknown. Endless mode past wave 15 was not measured at all — the +0.35 HP/wave slope is a guess to be corrected by play.
 - Candidates: card upgrades/removal, more boss layouts, moving bricks, seeded replays, adopting a test runner (moving the current Node simulation scripts into it).

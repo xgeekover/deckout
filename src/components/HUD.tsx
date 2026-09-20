@@ -107,6 +107,11 @@ export function HUD({
               {t.hud.bossCore} · {state.boss.hp}/{state.boss.maxHp}
             </span>
           )}
+          {state.endless && (
+            <span data-testid="hud-endless" className="text-[11px] text-emerald-300">
+              {t.hud.endless}
+            </span>
+          )}
           {/* 새 줄은 웨이브마다 정해진 수만큼만 들어온다. 0 이 되면 남은 벽돌만 치우면 된다. */}
           <span
             data-testid="reinforcements-left"
